@@ -126,7 +126,7 @@ class Saver:
     results['best_ratio_mean'] = np.mean(np.array(best_ratio))
     if len(best_samples) != 0:
       results['best_samples'] = np.array(best_samples)
-    self._dump_dict(results, 'results')
+    self._dump_dict(results, f'results_{self.config.model.name}_{self.config.model.graph_type}_{self.config.model.formulation}_{self.config.experiment.init_temperature}_{self.config.sampler.num_flips}_{self.config.model.penalty}')
 
   def dump_params(self, params):
     self._dump_dict(params, 'params')

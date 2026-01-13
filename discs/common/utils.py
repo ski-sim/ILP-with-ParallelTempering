@@ -157,7 +157,7 @@ def graph2edges(
     edge_weight = np.zeros((num_edges,), dtype=np.float32) + padded_weight
   for i, e in enumerate(g.edges(data=True)):
     x, y = e[0], e[1]
-    edge_from[i] = x
+    edge_from[i] = x # node index 
     edge_to[i] = y
     if has_edge_weights:
       edge_weight[i] = e[2]['weight']
@@ -197,10 +197,17 @@ def update_graph_cfg(config, graphs):
   config.model.max_num_edges = graphs.max_num_edges
   config.model.shape = (graphs.max_num_nodes,)
 
+def update_ilp_cfg(config, ilp):
+  config.model.max_num_nodes = ilp.max_num_nodes
+  config.model.max_num_constraints = ilp.max_num_constraints
+  config.model.shape = (ilp.max_num_nodes,)
 
 def get_datagen(config):
   test_graphs = graph_gen.get_graphs(config)
-  update_graph_cfg(config, test_graphs)
+  if config.model.name == 'ilp':
+    update_ilp_cfg(config, test_graphs)
+  else:
+    update_graph_cfg(config, test_graphs)
   datagen = test_graphs.get_iterator('test', config.model.num_models)
   return datagen
 

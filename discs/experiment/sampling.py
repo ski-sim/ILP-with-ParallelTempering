@@ -124,7 +124,9 @@ class Experiment:
     else:
       step_fn = functools.partial(sampler.step, model=model)
       obj_fn = evaluator.evaluate
-
+    compiled_obj_only_fn = jax.vmap(functools.partial(model.objective))
+    compiled_penalty_fn = jax.vmap(functools.partial(model.penalty))
+    compiled_mask_fn = jax.jit(jax.vmap(self.mask_per_instance, in_axes=(0, 0)))
     get_hop = jax.jit(self._get_hop)
     compiled_step = self._compile_sampler_step(step_fn)
     compiled_step_burnin = compiled_step
@@ -137,6 +139,9 @@ class Experiment:
         get_hop,
         compiled_obj_fn,
         model_frwrd,
+        compiled_mask_fn,
+        compiled_obj_only_fn,
+        compiled_penalty_fn
     )
 
   def _get_hop(self, x, new_x):
@@ -492,7 +497,7 @@ class CO_Experiment(Experiment):
     sample_idx, params, reference_obj = zip(*data_list)
     params = flax.core.frozen_dict.unfreeze(utils.tree_stack(params))
     self.ref_obj = jnp.array(reference_obj)
-    if self.config_model.name == 'mis':
+    if self.config_model.name in ['mis', 'ilp']:
       self.ref_obj = jnp.ones_like(self.ref_obj)
     self.sample_idx = jnp.array(sample_idx)
     return params, x0, state
@@ -547,7 +552,7 @@ class CO_Experiment(Experiment):
         best_samples,
     ) = self._initialize_chain_vars(bshape)
 
-    stp_burnin, stp_mixing, get_hop, obj_fn, _ = compiled_fns
+    stp_burnin, stp_mixing, get_hop, obj_fn, _, mask_fn, obj_only_fn, penalty_fn = compiled_fns
     fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
     # burn in
     burn_in_length = int(self.config.chain_length * self.config.ess_ratio) + 1
@@ -557,6 +562,7 @@ class CO_Experiment(Experiment):
       params['temperature'] = init_temperature * cur_temp
       rng = jax.random.fold_in(rng, step)
       step_rng = fn_reshape(jax.random.split(rng, math.prod(bshape)))
+      # params['mask'] = mask_fn(x, params)
       new_x, state, acc = stp_burnin(
           rng=step_rng,
           x=x,
@@ -572,6 +578,7 @@ class CO_Experiment(Experiment):
         is_better = ratio > best_ratio
         best_ratio = jnp.maximum(ratio, best_ratio)
         sample_mask = sample_mask.reshape(best_ratio.shape)
+        print(f'cur_temp: {cur_temp}, eval_val: {eval_val[0]}, obj: {obj_only_fn(params, new_x)[0]}, penalty: {penalty_fn(params, new_x)[0]}')
 
         br = np.array(best_ratio[sample_mask])
         br = jax.device_put(br, jax.devices('cpu')[0])
@@ -678,7 +685,35 @@ class CO_Experiment(Experiment):
         sample_mask,
         best_samples,
     )
+  
+  def mask_per_instance(self, x, params):
+    cur_selected_vars = (x == 1)
+    cur_x = x
+    if 'constraint_matrix' not in params:
+        return jnp.ones_like(x, dtype=jnp.bool_)
+    # 제약조건 정보를 가져올 때부터 float32로 타입을 지정합니다.
+    constraint_matrix = params['constraint_matrix'].astype(jnp.float32)
+    constraint_rhs = params['constraint_rhs'].astype(jnp.float32)
+    constraint_lhs = params['constraint_lhs'].astype(jnp.float32)
 
+    cur_constraint_matrix = constraint_matrix
+    cur_rhs = constraint_rhs
+    cur_lhs = constraint_lhs
+    cur_constraint_values = jnp.dot(cur_selected_vars.astype(jnp.float32), cur_constraint_matrix.T)
+    sign = (1 - 2 * cur_x).astype(jnp.float32)
+
+    final_feasible_mask = jnp.zeros_like(cur_selected_vars, dtype=jnp.bool_)
+    constraint_changes = jnp.einsum('bv,vc->bvc', sign, cur_constraint_matrix.T)
+    updated_values = cur_constraint_values[:, None, :] + constraint_changes
+        
+    # 제약조건 위반 여부 확인
+    violates = (updated_values < cur_lhs[None, None, :]) | (updated_values > cur_rhs[None, None, :]) # 위반 -> True
+    feasible_mask = ~violates.any(axis=2) # 하나라도 위반하면 False
+    final_feasible_mask = final_feasible_mask.at[:, :].set(feasible_mask)
+    all_masks = jnp.stack(final_feasible_mask)
+
+    return all_masks[None, ...]
+   
 
 class EBM_Experiment(Experiment):
 

@@ -26,6 +26,7 @@ def get_model_config(cfg_str):
       shape=(0,),
       rand_type=rand_type,
       num_instances=1000,
+      formulation='linear',
   )
   
   return config_dict.ConfigDict(model_config)

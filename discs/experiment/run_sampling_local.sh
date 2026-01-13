@@ -1,5 +1,9 @@
+model=mis
+graph_type=ertest
+sampler=path_auxiliary
+export CUDA_VISIBLE_DEVICES=0
 #!/bin/bash
-export XLA_FLAGS='--xla_force_host_platform_device_count=4'
+# export XLA_FLAGS='--xla_force_host_platform_device_count=4'
 
 default="default_value"
 graph_type=${graph_type:-$default}

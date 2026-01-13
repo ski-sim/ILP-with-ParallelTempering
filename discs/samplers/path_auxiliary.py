@@ -85,6 +85,7 @@ class PAFSNoReplacement(PathAuxiliarySampler):
     if self.num_categories != 2:
       logits = logits * (1 - x) + x * -1e9
     log_prob = jax.nn.log_softmax(jnp.reshape(logits, (x.shape[0], -1)), -1)
+    jax.debug.breakpoint()
     return ll_x, log_prob, num_calls
 
   def proposal(self, model, rng, x, model_param, state, x_mask):

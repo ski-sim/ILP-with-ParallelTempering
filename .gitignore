@@ -3,3 +3,6 @@ __pycache__/
 results_*/
 storage/
 sco/
+BINARY_EBM/
+RBM_DATA/
+text_infilling_data/

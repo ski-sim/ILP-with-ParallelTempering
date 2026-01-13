@@ -13,6 +13,8 @@ class Maxcut(comb_ebm.BinaryNodeCombEBM):
     super().__init__(config)
     self.config = config.model
     self.max_num_nodes = self.config.max_num_nodes
+    self.formulation = self.config.get('formulation', 'quadratic')
+    self.penalty_coeff = self.config.get('penalty', 2.0)
 
   def make_init_params(self, rng):
     try:
@@ -25,6 +27,24 @@ class Maxcut(comb_ebm.BinaryNodeCombEBM):
     return jax.random.bernoulli(
         key=rng, p=0.5, shape=(num_samples, self.max_num_nodes)
     ).astype(jnp.int32)
+
+  def penalty(self, params, x):
+      x = x * params['mask'] # 유효한 노드인지 아닌지. 
+      edge_from = params['edge_from']
+      edge_to = params['edge_to']
+      edge_mask = params['edge_mask'] # edge index가 유효한지 아닌지 판단단
+
+      gather2src = x[:, edge_from]
+      gather2dst = x[:, edge_to]
+      
+      if self.formulation == 'quadratic':
+        return 0
+      elif self.formulation == 'linear':
+        # Linear formulation: x_i + x_j <= 1
+        # Violation: max(0, x_i + x_j - 1)
+        violation = jnp.maximum(0, gather2src + gather2dst - 1) * edge_mask
+      penalty = self.penalty_coeff * jnp.sum(violation, axis=1)
+      return penalty
 
   def objective(self, params, x):
     edge_from = params['edge_from']

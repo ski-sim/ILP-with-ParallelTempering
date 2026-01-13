@@ -32,7 +32,11 @@ class CombEBM(abstractmodel.AbstractModel):
     x = x.astype(jnp.float32)  # int tensor is not differentiable
 
     def fun(z):
-      loglikelihood = self.forward(params, z)
+      # loglikelihood = self.forward(params, z)
+      z = z.astype(jnp.float32)
+      loglikelihood = self.objective(params, z) 
+      loglikelihood = jnp.zeros_like(loglikelihood)
+      loglikelihood = loglikelihood / params['temperature']
       return jnp.sum(loglikelihood), loglikelihood
 
     (_, loglikelihood), grad = jax.value_and_grad(fun, has_aux=True)(x)
