@@ -1,5 +1,6 @@
 """Main script for sampling based experiments."""
 import importlib
+import pdb
 from absl import app
 from absl import flags
 from discs.common import configs as common_configs
@@ -83,8 +84,10 @@ def main(_):
 
   # saver
   saver = saver_mod.build_saver(config)
-
-  # chain generation
+  
+  # for i in [1,2,5]:
+  # config.experiment.init_temperature = i
+# chain generation
   experiment.get_results(model, sampler, evaluator, saver)
 
 

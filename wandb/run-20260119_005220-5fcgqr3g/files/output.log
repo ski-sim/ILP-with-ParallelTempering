@@ -1,0 +1,71 @@
+  0%|                                                          | 0/100000 [00:36<?, ?it/s]
+> /mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py(710)mask_per_instance()
+-> if 'constraint_matrix' not in params:
+*** AttributeError: BatchTracer has no attribute keys
+Traced<ShapedArray(int32[32,1000])>with<BatchTrace(level=2/0)> with
+  val = Traced<ShapedArray(int32[100,32,1000])>with<DynamicJaxprTrace(level=1/0)>
+  batch_dim = 0
+jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/main_sampling.py", line 95, in <module>
+    app.run(main)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/absl/app.py", line 316, in run
+    _run_main(main, args)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/absl/app.py", line 261, in _run_main
+    sys.exit(main(argv))
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/main_sampling.py", line 91, in main
+    experiment.get_results(model, sampler, evaluator, saver)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 491, in get_results
+    if not self._get_chains_and_evaluations(model, sampler, evaluator, saver):
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 203, in _get_chains_and_evaluations
+    self._compute_chain(*preprocessed_info)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 571, in _compute_chain
+    params['mask'] = mask_fn(x, params)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 710, in mask_per_instance
+    if 'constraint_matrix' not in params:
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 710, in mask_per_instance
+    if 'constraint_matrix' not in params:
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/bdb.py", line 88, in trace_dispatch
+    return self.dispatch_line(frame)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/bdb.py", line 113, in dispatch_line
+    if self.quitting: raise BdbQuit
+bdb.BdbQuit
+jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/main_sampling.py", line 95, in <module>
+    app.run(main)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/absl/app.py", line 316, in run
+    _run_main(main, args)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/absl/app.py", line 261, in _run_main
+    sys.exit(main(argv))
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/main_sampling.py", line 91, in main
+    experiment.get_results(model, sampler, evaluator, saver)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 491, in get_results
+    if not self._get_chains_and_evaluations(model, sampler, evaluator, saver):
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 203, in _get_chains_and_evaluations
+    self._compute_chain(*preprocessed_info)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 571, in _compute_chain
+    params['mask'] = mask_fn(x, params)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 710, in mask_per_instance
+    if 'constraint_matrix' not in params:
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 710, in mask_per_instance
+    if 'constraint_matrix' not in params:
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/bdb.py", line 88, in trace_dispatch
+    return self.dispatch_line(frame)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/bdb.py", line 113, in dispatch_line
+    if self.quitting: raise BdbQuit
+bdb.BdbQuit

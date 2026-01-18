@@ -5,10 +5,10 @@ def get_config():
   model_config = config_dict.ConfigDict(
       dict(
           name='mis',
-          graph_type='ertest',
-          cfg_str='r-800',
+          graph_type='mistest',
+          cfg_str='r-1500',
           data_root='./sco/',
-          penalty=100,
+          penalty=1000,
       )
   )
   model_config['save_dir_name'] = model_config['name']

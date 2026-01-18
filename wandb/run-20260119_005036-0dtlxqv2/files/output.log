@@ -1,0 +1,61 @@
+  0%|                                                          | 0/100000 [00:00<?, ?it/s]
+jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/main_sampling.py", line 95, in <module>
+    app.run(main)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/absl/app.py", line 316, in run
+    _run_main(main, args)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/absl/app.py", line 261, in _run_main
+    sys.exit(main(argv))
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/main_sampling.py", line 91, in main
+    experiment.get_results(model, sampler, evaluator, saver)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 491, in get_results
+    if not self._get_chains_and_evaluations(model, sampler, evaluator, saver):
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 203, in _get_chains_and_evaluations
+    self._compute_chain(*preprocessed_info)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 571, in _compute_chain
+    params['mask'] = mask_fn(params, x)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 708, in mask_per_instance
+    return jnp.ones_like(x, dtype=jnp.bool_)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 3317, in ones_like
+    util.check_arraylike("ones_like", a)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/jax/_src/numpy/util.py", line 335, in check_arraylike
+    raise TypeError(msg.format(fun_name, type(arg), pos))
+TypeError: ones_like requires ndarray or scalar arguments, got <class 'dict'> at position 0.
+jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/main_sampling.py", line 95, in <module>
+    app.run(main)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/absl/app.py", line 316, in run
+    _run_main(main, args)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/absl/app.py", line 261, in _run_main
+    sys.exit(main(argv))
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/main_sampling.py", line 91, in main
+    experiment.get_results(model, sampler, evaluator, saver)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 491, in get_results
+    if not self._get_chains_and_evaluations(model, sampler, evaluator, saver):
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 203, in _get_chains_and_evaluations
+    self._compute_chain(*preprocessed_info)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 571, in _compute_chain
+    params['mask'] = mask_fn(params, x)
+  File "/mnt/HDD/wewe1117/python_folder/discs-1/discs/experiment/sampling.py", line 708, in mask_per_instance
+    return jnp.ones_like(x, dtype=jnp.bool_)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 3317, in ones_like
+    util.check_arraylike("ones_like", a)
+  File "/home/wewe1117/anaconda3/envs/disc/lib/python3.9/site-packages/jax/_src/numpy/util.py", line 335, in check_arraylike
+    raise TypeError(msg.format(fun_name, type(arg), pos))
+TypeError: ones_like requires ndarray or scalar arguments, got <class 'dict'> at position 0.

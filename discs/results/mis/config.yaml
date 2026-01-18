@@ -17,13 +17,18 @@ _fields:
       init_temperature: 1
       log_every_steps: 100
       name: CO_Experiment
-      num_models: 128
+      num_models: 100
       plot_every_steps: 10
+      pt: deo
+      pt_interval: 1000
+      reweight: None
       run_parallel: true
       save_every_steps: 100
       save_root: ./discs/results/mis
       save_samples: false
       shuffle_buffer_size: 0
+      t_max: 5
+      t_min: 0.1
       t_schedule: exp_decay
       use_tqdm: false
       window_size: 10
@@ -33,18 +38,18 @@ _fields:
   model: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
     _convert_dict: true
     _fields:
-      cfg_str: r-800
+      cfg_str: r-1500
       data_root: ./sco/
       formulation: indicator
-      graph_type: ertest
-      max_num_edges: 47885
-      max_num_nodes: 800
+      graph_type: mistest
+      max_num_edges: 0
+      max_num_nodes: 1500
       name: mis
       num_categories: 2
-      num_instances: 128
-      num_models: 128
-      penalty: 100
-      rand_type: '800'
+      num_instances: 100
+      num_models: 100
+      penalty: 1000
+      rand_type: '1500'
       save_dir_name: mis
       shape: !!python/tuple
       - 0
@@ -57,7 +62,7 @@ _fields:
       approx_with_grad: true
       balancing_fn_type: SQRT
       name: path_auxiliary
-      num_flips: 1
+      num_flips: 10
       target_acceptance_rate: 0.574
       use_fast_path: true
     _locked: false

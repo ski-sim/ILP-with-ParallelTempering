@@ -40,6 +40,8 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
 
     if self.formulation == 'max_linear':
       violation = jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) 
+    elif self.formulation == 'max_linear_square':
+      violation = jnp.square(jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) ) 
     elif self.formulation == 'indicator':
       constraint_satisfied = (Ax <= ub) & (Ax >= lb)
       violation = ~constraint_satisfied

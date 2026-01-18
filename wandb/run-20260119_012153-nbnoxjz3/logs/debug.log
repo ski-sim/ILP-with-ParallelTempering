@@ -1,0 +1,22 @@
+2026-01-19 01:21:53,688 INFO    MainThread:211720 [wandb_setup.py:_flush():80] Current SDK version is 0.21.1
+2026-01-19 01:21:53,688 INFO    MainThread:211720 [wandb_setup.py:_flush():80] Configure stats pid to 211720
+2026-01-19 01:21:53,688 INFO    MainThread:211720 [wandb_setup.py:_flush():80] Loading settings from /home/wewe1117/.config/wandb/settings
+2026-01-19 01:21:53,688 INFO    MainThread:211720 [wandb_setup.py:_flush():80] Loading settings from /mnt/HDD/wewe1117/python_folder/discs-1/wandb/settings
+2026-01-19 01:21:53,688 INFO    MainThread:211720 [wandb_setup.py:_flush():80] Loading settings from environment variables
+2026-01-19 01:21:53,688 INFO    MainThread:211720 [wandb_init.py:setup_run_log_directory():703] Logging user logs to /mnt/HDD/wewe1117/python_folder/discs-1/wandb/run-20260119_012153-nbnoxjz3/logs/debug.log
+2026-01-19 01:21:53,689 INFO    MainThread:211720 [wandb_init.py:setup_run_log_directory():704] Logging internal logs to /mnt/HDD/wewe1117/python_folder/discs-1/wandb/run-20260119_012153-nbnoxjz3/logs/debug-internal.log
+2026-01-19 01:21:53,689 INFO    MainThread:211720 [wandb_init.py:init():830] calling init triggers
+2026-01-19 01:21:53,689 INFO    MainThread:211720 [wandb_init.py:init():835] wandb.init called with sweep_config: {}
+config: {'_wandb': {}}
+2026-01-19 01:21:53,689 INFO    MainThread:211720 [wandb_init.py:init():871] starting backend
+2026-01-19 01:21:53,954 INFO    MainThread:211720 [wandb_init.py:init():874] sending inform_init request
+2026-01-19 01:21:53,957 INFO    MainThread:211720 [wandb_init.py:init():882] backend started and connected
+2026-01-19 01:21:53,960 INFO    MainThread:211720 [wandb_init.py:init():953] updated telemetry
+2026-01-19 01:21:54,029 INFO    MainThread:211720 [wandb_init.py:init():977] communicating run to backend with 90.0 second timeout
+2026-01-19 01:21:54,594 INFO    MainThread:211720 [wandb_init.py:init():1029] starting run threads in backend
+2026-01-19 01:21:54,739 INFO    MainThread:211720 [wandb_run.py:_console_start():2494] atexit reg
+2026-01-19 01:21:54,739 INFO    MainThread:211720 [wandb_run.py:_redirect():2342] redirect: wrap_raw
+2026-01-19 01:21:54,739 INFO    MainThread:211720 [wandb_run.py:_redirect():2411] Wrapping output streams.
+2026-01-19 01:21:54,739 INFO    MainThread:211720 [wandb_run.py:_redirect():2434] Redirects installed.
+2026-01-19 01:21:54,742 INFO    MainThread:211720 [wandb_init.py:init():1075] run started, returning control to user process
+2026-01-19 01:21:55,946 INFO    MsgRouterThr:211720 [mailbox.py:close():129] [no run ID] Closing mailbox, abandoning 1 handles.

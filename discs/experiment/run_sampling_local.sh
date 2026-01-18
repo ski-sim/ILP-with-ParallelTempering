@@ -1,8 +1,7 @@
-model=mis
-graph_type=ertest
+model=ilp
+graph_type=sc
 sampler=path_auxiliary
-export CUDA_VISIBLE_DEVICES=0
-#!/bin/bash
+export CUDA_VISIBLE_DEVICES=7
 # export XLA_FLAGS='--xla_force_host_platform_device_count=4'
 
 default="default_value"

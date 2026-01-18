@@ -77,6 +77,53 @@ class ErTestGraphGen(MISGen):
       if not repeat:
         break
 
+class MISTestGraphGen(MISGen):
+  """Generator for MIS test graphs."""
+
+  def __init__(self, data_root, model_config):
+    super().__init__()
+    data_folder = os.path.join(data_root, 'mis_instance_%s_networkx' % model_config.rand_type)
+    file_list = []
+    for fname in os.listdir(data_folder):
+      if fname.startswith('mis'):
+        file_list.append(os.path.join(data_folder, fname))
+    self.file_list = sorted(file_list)
+    if (
+        model_config.max_num_nodes > 0
+        and model_config.max_num_edges > 0
+        and model_config.num_instances > 0
+    ):
+      self._max_num_nodes = model_config.max_num_nodes
+      self._max_num_edges = model_config.max_num_edges
+      self._num_instances = model_config.num_instances
+    else:
+      for fname in self.file_list:
+        with open(fname, 'rb') as f:
+          g = pickle.load(f)
+          self._max_num_nodes = max(self._max_num_nodes, len(g))
+          self._max_num_edges = max(self._max_num_edges, len(g.edges()))
+          self._num_instances += 1
+    print('max num nodes', self.max_num_nodes)
+    print('max num edges', self.max_num_edges)
+    print('num instances', self.num_instances)
+
+  def sample_gen(self, phase, repeat=False):
+    assert phase == 'test'
+    while True:
+      for fname in self.file_list:
+        with open(fname, 'rb') as f:
+          g = pickle.load(f)
+          obj = 0
+          for node in g.nodes(data=True):
+            if 'label' in node[1]:
+              obj += node[1]['label']
+          if obj == 0:
+            obj = 1
+          yield g, obj
+      if not repeat:
+        break
+
+
 
 class ErDensityGraphGen(MISGen):
   """Generator for ErdosRenyi test graphs with different densities."""

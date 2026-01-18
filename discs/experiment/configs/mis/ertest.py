@@ -14,7 +14,12 @@ def get_config():
           init_temperature=1,
           decay_rate=0.01,
           final_temperature=0.0001,
+          t_min = 0.1,
+          t_max = 5,
           save_root='',
+          pt = 'deo',
+          pt_interval = 1000,
+          adaptive= 'mask'
       )
   )
   return config_dict.ConfigDict(exp_config)

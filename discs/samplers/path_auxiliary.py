@@ -17,12 +17,18 @@ class PathAuxiliarySampler(locallybalanced.LocallyBalancedSampler):
       if x_mask is not None:
         x_mask = jnp.expand_dims(x_mask, axis=-1)
     rng_new_sample, rng_acceptance = jax.random.split(rng)
+    if self.reweight == 'mask':
 
+      reweight = self.mask_per_instance(x, model_param)
+    else:
+      reweight = jnp.ones_like(x, dtype=jnp.bool_)
     ll_x, y, trajectory, num_calls_forward = self.proposal(
-        model, rng_new_sample, x, model_param, state, x_mask)
+        model, rng_new_sample, x, model_param, state, x_mask, reweight)
     ll_x2y = trajectory['ll_x2y']
+    if self.reweight == 'mask':
+      reweight = self.mask_per_instance(y, model_param)
     ll_y, ll_y2x, num_calls_backward = self.ll_y2x(
-        model, x, model_param, trajectory, y, x_mask)
+        model, x, model_param, trajectory, y, x_mask, reweight)
 
     log_acc = ll_y + ll_y2x - ll_x - ll_x2y
     new_x, new_state = self.select_sample(
@@ -31,6 +37,34 @@ class PathAuxiliarySampler(locallybalanced.LocallyBalancedSampler):
 
     acc = jnp.mean(jnp.clip(jnp.exp(log_acc), a_max=1))
     return new_x, new_state, acc
+
+  def mask_per_instance(self, x, params):
+    cur_selected_vars = (x == 1)
+    cur_x = x
+    if 'constraint_matrix' not in params:
+        return jnp.ones_like(x, dtype=jnp.bool_)
+    # 제약조건 정보를 가져올 때부터 float32로 타입을 지정합니다.
+    constraint_matrix = params['constraint_matrix'].astype(jnp.float32)
+    constraint_rhs = params['constraint_rhs'].astype(jnp.float32)
+    constraint_lhs = params['constraint_lhs'].astype(jnp.float32)
+
+    cur_constraint_matrix = constraint_matrix
+    cur_rhs = constraint_rhs
+    cur_lhs = constraint_lhs
+    cur_constraint_values = jnp.dot(cur_selected_vars.astype(jnp.float32), cur_constraint_matrix.T)
+    sign = (1 - 2 * cur_x).astype(jnp.float32)
+
+    final_feasible_mask = jnp.zeros_like(cur_selected_vars, dtype=jnp.bool_)
+    constraint_changes = jnp.einsum('bv,vc->bvc', sign, cur_constraint_matrix.T)
+    updated_values = cur_constraint_values[:, None, :] + constraint_changes
+        
+    # 제약조건 위반 여부 확인
+    violates = (updated_values < cur_lhs[None, None, :]) | (updated_values > cur_rhs[None, None, :]) # 위반 -> True
+    feasible_mask = ~violates.any(axis=2) # 하나라도 위반하면 False, 만족하면 True
+    final_feasible_mask = final_feasible_mask.at[:, :].set(feasible_mask)
+    all_masks = jnp.stack(final_feasible_mask)
+
+    return all_masks[None, ...]
 
   def select_sample(self, rng, num_calls, log_acc,
                     current_sample, new_sample, sampler_state):
@@ -45,6 +79,7 @@ class PAFSNoReplacement(PathAuxiliarySampler):
 
   def __init__(self, config: ml_collections.ConfigDict):
     super().__init__(config)
+    self.reweight = config.experiment.get('reweight', 'None')
     self.adaptive = config.sampler.get('adaptive', False)
     if self.adaptive:
       self.target_acceptance_rate = config.sampler.target_acceptance_rate
@@ -67,7 +102,7 @@ class PAFSNoReplacement(PathAuxiliarySampler):
     state['radius'] = jnp.ones(shape=(), dtype=jnp.float32) * self.num_flips
     return state
 
-  def get_local_dist(self, model, x, model_param, x_mask):
+  def get_local_dist(self, model, x, model_param, x_mask, reweight):
     if self.approx_with_grad:
       ll_x, grad_x = model.get_value_and_grad(model_param, x)
       if self.num_categories != 2:
@@ -84,13 +119,15 @@ class PAFSNoReplacement(PathAuxiliarySampler):
       logits = logits * x_mask + -1e9 * (1 - x_mask)
     if self.num_categories != 2:
       logits = logits * (1 - x) + x * -1e9
+    # masked_logits = logits == -1e9 
+    # reweighted_logits = logits * reweight + -1e9 * (1 - reweight)
+    # logits = jnp.where(masked_logits, logits, reweighted_logits)
     log_prob = jax.nn.log_softmax(jnp.reshape(logits, (x.shape[0], -1)), -1)
-    jax.debug.breakpoint()
     return ll_x, log_prob, num_calls
 
-  def proposal(self, model, rng, x, model_param, state, x_mask):
+  def proposal(self, model, rng, x, model_param, state, x_mask, reweight):
     ll_x, log_prob, num_calls = self.get_local_dist(
-        model, x, model_param, x_mask)
+        model, x, model_param, x_mask, reweight)
     if self.adaptive:
       num_samples = jnp.clip(jnp.round(state['radius']).astype(jnp.int32),
                              a_min=1, a_max=math.prod(self.sample_shape))
@@ -136,9 +173,9 @@ class PAFSNoReplacement(PathAuxiliarySampler):
     }
     return ll_x, y, trajectory, num_calls
 
-  def ll_y2x(self, model, x, model_param, forward_trajectory, y, x_mask):
+  def ll_y2x(self, model, x, model_param, forward_trajectory, y, x_mask, reweight):
     ll_y, log_prob, num_calls = self.get_local_dist(
-        model, y, model_param, x_mask)
+        model, y, model_param, x_mask, reweight)
     if self.num_categories > 2:
       log_prob_all = jnp.reshape(log_prob,
                                  [log_prob.shape[0], -1, self.num_categories])

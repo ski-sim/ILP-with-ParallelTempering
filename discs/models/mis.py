@@ -22,6 +22,7 @@ class MIS(comb_ebm.BinaryNodeCombEBM):
       return None
     return data_list
 
+
   def penalty(self, params, x):
     x = x * params['mask'] # 유효한 노드인지 아닌지. 
     edge_from = params['edge_from']
@@ -29,7 +30,7 @@ class MIS(comb_ebm.BinaryNodeCombEBM):
     edge_mask = params['edge_mask'] # edge index가 유효한지 아닌지 판단단
 
     gather2src = x[:, edge_from]
-    gather2dst = x[:, edge_to]
+    gather2dst = x[:, edge_to] 
     if self.formulation == 'quadratic':
       violation = gather2src * gather2dst * edge_mask # 1 * 1 이면 violation
     elif self.formulation == 'linear':
@@ -41,6 +42,8 @@ class MIS(comb_ebm.BinaryNodeCombEBM):
       violation = ~constraint_satisfied
     elif self.formulation == 'objective':
       violation = jnp.zeros((x.shape[0], edge_mask.shape[0]), dtype=jnp.int32)
+    elif self.formulation == 'max_linear_square':
+      violation = jnp.square(jnp.maximum(0, gather2src + gather2dst - 1)) * edge_mask
     penalty = self.penalty_coeff * jnp.sum(violation, axis=1)
     return penalty
 

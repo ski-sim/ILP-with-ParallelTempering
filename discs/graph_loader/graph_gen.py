@@ -16,6 +16,8 @@ def get_graphs(config):
       return maxcut_loader.OptsicomGen(config.model.rand_type)
   elif config.model.graph_type.startswith('ba'):
     return maxcut_loader.RandGraphGen(config.model.data_root, config.model)
+  elif config.model.graph_type.startswith('mistest'):
+    return mis_loader.MISTestGraphGen(config.model.data_root, config.model)
   elif config.model.graph_type.startswith('ertest'):
     return mis_loader.ErTestGraphGen(config.model.data_root, config.model)
   elif config.model.graph_type.startswith('satlib'):

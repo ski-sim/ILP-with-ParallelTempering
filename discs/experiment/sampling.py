@@ -9,7 +9,8 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import tqdm
-
+from discs.common.parallel_tempering import swap_samples_deo, swap_samples_seo
+import wandb
 
 class Experiment:
   """Experiment class that generates chains of samples."""
@@ -127,6 +128,7 @@ class Experiment:
     compiled_obj_only_fn = jax.vmap(functools.partial(model.objective))
     compiled_penalty_fn = jax.vmap(functools.partial(model.penalty))
     compiled_mask_fn = jax.jit(jax.vmap(self.mask_per_instance, in_axes=(0, 0)))
+    compiled_pt_fn = jax.vmap(functools.partial(swap_samples_deo if self.config.pt == 'deo' else swap_samples_seo), in_axes=(0, 0, 0, None, None))
     get_hop = jax.jit(self._get_hop)
     compiled_step = self._compile_sampler_step(step_fn)
     compiled_step_burnin = compiled_step
@@ -141,7 +143,8 @@ class Experiment:
         model_frwrd,
         compiled_mask_fn,
         compiled_obj_only_fn,
-        compiled_penalty_fn
+        compiled_penalty_fn,
+        compiled_pt_fn
     )
 
   def _get_hop(self, x, new_x):
@@ -522,6 +525,8 @@ class CO_Experiment(Experiment):
           config.decay_rate,
           end_value=config.final_temperature,
       )
+    elif config.t_schedule == 'pt':
+      schedule = lambda step: step * 0 + jnp.geomspace(self.config.t_min, self.config.t_max, num=self.config.batch_size)[None, :]
     else:
       raise ValueError('Unknown schedule %s' % config.t_schedule)
     return schedule
@@ -552,17 +557,18 @@ class CO_Experiment(Experiment):
         best_samples,
     ) = self._initialize_chain_vars(bshape)
 
-    stp_burnin, stp_mixing, get_hop, obj_fn, _, mask_fn, obj_only_fn, penalty_fn = compiled_fns
+    stp_burnin, stp_mixing, get_hop, obj_fn, _, mask_fn, obj_only_fn, penalty_fn, pt_fn = compiled_fns
     fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
     # burn in
     burn_in_length = int(self.config.chain_length * self.config.ess_ratio) + 1
-
+    wandb.init()
     for step in tqdm.tqdm(range(1, burn_in_length)):
       cur_temp = t_schedule(step)
-      params['temperature'] = init_temperature * cur_temp
+      params['temperature'] = init_temperature[:, None] * cur_temp
       rng = jax.random.fold_in(rng, step)
       step_rng = fn_reshape(jax.random.split(rng, math.prod(bshape)))
-      # params['mask'] = mask_fn(x, params)
+      if self.config.reweight == 'mask':
+        params['mask'] = mask_fn(x, params)
       new_x, state, acc = stp_burnin(
           rng=step_rng,
           x=x,
@@ -570,6 +576,9 @@ class CO_Experiment(Experiment):
           state=state,
           x_mask=params['mask'],
       )
+      # parallel tempering
+      if self.config.t_schedule == 'pt' and self.config.pt in ['deo', 'seo'] and step % self.config.pt_interval == 0:
+        new_x, is_accept = pt_fn(new_x, obj_fn(samples=new_x, params=params), params['temperature'], rng, step)
 
       if step % self.config.log_every_steps == 0:
         eval_val = obj_fn(samples=new_x, params=params)
@@ -579,7 +588,7 @@ class CO_Experiment(Experiment):
         best_ratio = jnp.maximum(ratio, best_ratio)
         sample_mask = sample_mask.reshape(best_ratio.shape)
         print(f'cur_temp: {cur_temp}, eval_val: {eval_val[0]}, obj: {obj_only_fn(params, new_x)[0]}, penalty: {penalty_fn(params, new_x)[0]}')
-
+        wandb.log({'burnin/step':step, 'burnin/best_ratio': jnp.mean(best_ratio),'burnin/penalty':jnp.mean(penalty_fn(params, new_x))})
         br = np.array(best_ratio[sample_mask])
         br = jax.device_put(br, jax.devices('cpu')[0])
         chain.append(br)
@@ -609,10 +618,12 @@ class CO_Experiment(Experiment):
 
     for step in tqdm.tqdm(range(burn_in_length, 1 + self.config.chain_length)):
       cur_temp = t_schedule(step)
-      params['temperature'] = init_temperature * cur_temp
+      params['temperature'] = init_temperature[:, None] * cur_temp
       rng = jax.random.fold_in(rng, step)
       step_rng = fn_reshape(jax.random.split(rng, math.prod(bshape)))
       start = time.time()
+      if self.config.reweight == 'mask':
+        params['mask'] = mask_fn(x, params)
       new_x, state, acc = stp_mixing(
           rng=step_rng,
           x=x,
@@ -620,6 +631,9 @@ class CO_Experiment(Experiment):
           state=state,
           x_mask=params['mask'],
       )
+      # parallel tempering
+      if self.config.t_schedule == 'pt' and self.config.pt in ['deo', 'seo'] and step % self.config.pt_interval == 0:
+        new_x, is_accept = pt_fn(new_x, obj_fn(samples=new_x, params=params), params['temperature'], rng, step)
       running_time += time.time() - start
       if step % self.config.log_every_steps == 0:
         eval_val = obj_fn(samples=new_x, params=params)
@@ -708,7 +722,7 @@ class CO_Experiment(Experiment):
         
     # 제약조건 위반 여부 확인
     violates = (updated_values < cur_lhs[None, None, :]) | (updated_values > cur_rhs[None, None, :]) # 위반 -> True
-    feasible_mask = ~violates.any(axis=2) # 하나라도 위반하면 False
+    feasible_mask = ~violates.any(axis=2) # 하나라도 위반하면 False, 만족하면 True
     final_feasible_mask = final_feasible_mask.at[:, :].set(feasible_mask)
     all_masks = jnp.stack(final_feasible_mask)
 

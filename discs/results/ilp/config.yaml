@@ -19,11 +19,16 @@ _fields:
       name: CO_Experiment
       num_models: 100
       plot_every_steps: 10
+      pt: deo
+      pt_interval: 1000
+      reweight: mask
       run_parallel: true
       save_every_steps: 100
       save_root: ./discs/results/ilp
       save_samples: false
       shuffle_buffer_size: 0
+      t_max: 5
+      t_min: 0.1
       t_schedule: exp_decay
       use_tqdm: false
       window_size: 10
@@ -35,10 +40,10 @@ _fields:
     _fields:
       cfg_str: r-800
       data_root: ./sco/
-      formulation: linear
+      formulation: indicator
       graph_type: sc
       max_num_constraints: 5000
-      max_num_nodes: 1000
+      max_num_nodes: 2000
       name: ilp
       num_categories: 2
       num_instances: 100
@@ -57,7 +62,7 @@ _fields:
       approx_with_grad: true
       balancing_fn_type: SQRT
       name: path_auxiliary
-      num_flips: 1
+      num_flips: 10
       target_acceptance_rate: 0.574
       use_fast_path: true
     _locked: false

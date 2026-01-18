@@ -1,0 +1,93 @@
+_wandb:
+    value:
+        cli_version: 0.21.1
+        e:
+            qy7zb3tzi2bw2hskvwjbuoixsu8jpdsg:
+                args:
+                    - --model_config=discs/models/configs/ilp_config.py
+                    - --sampler_config=discs/samplers/configs/path_auxiliary_config.py
+                    - --config=discs/experiment/configs/ilp/sc.py
+                    - --run_local=True
+                cpu_count: 24
+                cpu_count_logical: 48
+                cudaVersion: "12.4"
+                disk:
+                    /:
+                        total: "943412031488"
+                        used: "518361993216"
+                email: kuilshim1117@gmail.com
+                executable: /home/wewe1117/anaconda3/envs/disc/bin/python
+                git:
+                    commit: 7d175a778095bb9251ac87f9d4c160be582c38df
+                    remote: https://github.com/ski-sim/PT-ILP.git
+                gpu: NVIDIA GeForce RTX 3090
+                gpu_count: 8
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-5dd75ff7-f5b7-3744-4f7f-cea8e399fed7
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-62a2c37e-bc61-5642-9cf7-3a969c058baa
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-67defd90-c3bd-541b-225f-97069a6cf0eb
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-b89b9b72-dc53-b1f1-e9c2-c93ed48cd785
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-2ea0dc97-4c62-69ab-d894-fffd0cc3a176
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-ca18430e-3f8c-b5d2-dcd7-2daeb42cc959
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-de0385ee-9d61-627e-9c6a-89f707ae4510
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-75276c94-2eed-4f98-7dbe-5eac9fa54a16
+                host: SILAB-Bobcat
+                memory:
+                    total: "236263104512"
+                os: Linux-6.8.0-47-generic-x86_64-with-glibc2.39
+                program: -m discs.experiment.main_sampling
+                python: CPython 3.9.23
+                root: /mnt/HDD/wewe1117/python_folder/discs-1
+                startedAt: "2026-01-18T16:21:53.686422Z"
+                writerId: qy7zb3tzi2bw2hskvwjbuoixsu8jpdsg
+        m: []
+        python_version: 3.9.23
+        t:
+            "1":
+                - 2
+                - 3
+                - 12
+                - 45
+                - 49
+            "2":
+                - 2
+                - 3
+                - 12
+                - 45
+                - 49
+            "4": 3.9.23
+            "5": 0.21.1
+            "12": 0.21.1
+            "13": linux-x86_64
