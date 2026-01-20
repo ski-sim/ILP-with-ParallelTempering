@@ -19,7 +19,7 @@ def get_config():
           save_root='',
           pt = 'deo',
           pt_interval = 1000,
-          adaptive= 'mask'
+          reweight= 'mask'
       )
   )
   return config_dict.ConfigDict(exp_config)

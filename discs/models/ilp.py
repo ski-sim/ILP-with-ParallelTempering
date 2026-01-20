@@ -42,9 +42,12 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
       violation = jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) 
     elif self.formulation == 'max_linear_square':
       violation = jnp.square(jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) ) 
+    elif self.formulation == 'augmented_lagrangian':
+      violation = jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) + jnp.square(jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) ) /2
     elif self.formulation == 'indicator':
       constraint_satisfied = (Ax <= ub) & (Ax >= lb)
       violation = ~constraint_satisfied
+      # violation = (~constraint_satisfied).astype(jnp.float32)
 
     penalty = self.penalty_coeff * jnp.sum(violation, axis=0)
     return penalty
@@ -53,6 +56,8 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
     if self.config.graph_type == 'ca':
       return jnp.dot(x, params['obj_coeffs'])
     elif self.config.graph_type == 'sc':
+      return -jnp.dot(x, params['obj_coeffs'])
+    elif self.config.graph_type == 'mis':
       return -jnp.dot(x, params['obj_coeffs'])
 
   def logratio_in_neighborhood(self, params, x):

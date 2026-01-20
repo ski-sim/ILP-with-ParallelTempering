@@ -118,7 +118,7 @@ class Saver:
           )
           plt.imsave(image_path, np.array(img), cmap=cm.gray)
 
-  def save_co_resuts(self, trajectory, best_ratio, running_time, best_samples):
+  def save_co_results(self, trajectory, best_ratio, running_time, best_samples):
     results = {}
     results['trajectory'] = np.array(trajectory)
     results['best_ratio'] = np.array(best_ratio)
@@ -126,7 +126,7 @@ class Saver:
     results['best_ratio_mean'] = np.mean(np.array(best_ratio))
     if len(best_samples) != 0:
       results['best_samples'] = np.array(best_samples)
-    self._dump_dict(results, f'results_{self.config.model.name}_{self.config.model.graph_type}_{self.config.model.formulation}_{self.config.experiment.init_temperature}_{self.config.sampler.num_flips}_{self.config.model.penalty}_{self.config.experiment.t_schedule}_{self.config.experiment.pt}_{self.config.experiment.pt_interval}_{self.config.experiment.t_min}_{self.config.experiment.t_max}_{self.config.experiment.reweight}')
+    self._dump_dict(results, f'results_{self.config.model.name}_{self.config.model.graph_type}_{self.config.model.max_num_nodes}_{self.config.model.formulation}_{self.config.experiment.init_temperature}_{self.config.sampler.num_flips}_{self.config.model.penalty}_{self.config.experiment.t_schedule}_{self.config.experiment.pt}_{self.config.experiment.pt_interval}_{self.config.experiment.t_min}_{self.config.experiment.t_max}_{self.config.experiment.reweight}')
 
   def dump_params(self, params):
     self._dump_dict(params, 'params')

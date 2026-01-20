@@ -26,6 +26,6 @@ def get_model_config(cfg_str):
       num_categories=2,
       shape=(0,),
       rand_type=rand_type,
-      formulation='indicator',
+      formulation='max_linear_square',
   )
   return config_dict.ConfigDict(model_config)

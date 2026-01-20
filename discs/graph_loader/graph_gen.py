@@ -36,7 +36,7 @@ def get_graphs(config):
   elif config.model.graph_type == 'gap_rand':
     return normcut_loader.RandGraphs(
         config.model.data_root, config.model)
-  elif config.model.graph_type in ['sc', 'ca']:
+  elif config.model.graph_type in ['sc', 'ca', 'mis']:
     return ilp_loader.ILPGraphGen(config.model.data_root, config.model)
   else:
     raise ValueError('Unknown graph type %s' % config.model.graph_type)
