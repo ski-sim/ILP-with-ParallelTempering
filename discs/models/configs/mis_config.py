@@ -8,7 +8,7 @@ def get_config():
           graph_type='ertest',
           cfg_str='r-800',
           data_root='./sco/',
-          penalty=100,
+          penalty=0.9,
       )
   )
   model_config['save_dir_name'] = model_config['name']

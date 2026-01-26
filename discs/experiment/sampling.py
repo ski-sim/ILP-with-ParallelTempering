@@ -619,12 +619,14 @@ class CO_Experiment(Experiment):
       if step % self.config.log_every_steps == 0:
         eval_val = obj_fn(samples=new_x, params=params)
         eval_val = eval_val.reshape(self.config.num_models, -1)
+        penalty_val = penalty_fn(params, new_x)
+        eval_val = jnp.where(penalty_val > 0, -jnp.inf, eval_val)
         ratio = jnp.max(eval_val, axis=-1).reshape(-1) / self.ref_obj
         is_better = ratio > best_ratio
         best_ratio = jnp.maximum(ratio, best_ratio)
         sample_mask = sample_mask.reshape(best_ratio.shape)
-        # print(f'cur_temp: {cur_temp}, eval_val: {eval_val[0]}, obj: {obj_only_fn(params, new_x)[0]}, penalty: {penalty_fn(params, new_x)[0]}')
-        wandb.log({'burnin/step':step, 'burnin/best_ratio': jnp.mean(best_ratio),'burnin/penalty':jnp.mean(penalty_fn(params, new_x))})
+        print(f'cur_temp: {cur_temp}, eval_val: {eval_val[0]}, obj: {obj_only_fn(params, new_x)[0]}, penalty: {penalty_val[0]}')
+        wandb.log({'burnin/step':step, 'burnin/best_ratio': jnp.mean(best_ratio),'burnin/penalty':jnp.mean(penalty_val)})
         br = np.array(best_ratio[sample_mask])
         br = jax.device_put(br, jax.devices('cpu')[0])
         chain.append(br)
@@ -703,6 +705,8 @@ class CO_Experiment(Experiment):
       if step % self.config.log_every_steps == 0:
         eval_val = obj_fn(samples=new_x, params=params)
         eval_val = eval_val.reshape(self.config.num_models, -1)
+        penalty_val = penalty_fn(params, new_x)
+        eval_val = jnp.where(penalty_val > 0, -jnp.inf, eval_val)
         ratio = jnp.max(eval_val, axis=-1).reshape(-1) / self.ref_obj
         is_better = ratio > best_ratio
         best_ratio = jnp.maximum(ratio, best_ratio)
@@ -797,30 +801,29 @@ class CO_Experiment(Experiment):
   def mask_per_instance(self, x, params):
     cur_selected_vars = (x == 1)
     cur_x = x
-    if 'constraint_matrix' not in params:
-        return jnp.ones_like(x, dtype=jnp.bool_)
+    
     # 제약조건 정보를 가져올 때부터 float32로 타입을 지정합니다.
-    constraint_matrix = params['constraint_matrix'].astype(jnp.float32)
-    constraint_rhs = params['constraint_rhs'].astype(jnp.float32)
-    constraint_lhs = params['constraint_lhs'].astype(jnp.float32)
+    constraint_matrix = params['constraint_matrix'] # astype 미리 바꾸기
+    constraint_rhs = params['constraint_rhs']
+    constraint_lhs = params['constraint_lhs']
 
     cur_constraint_matrix = constraint_matrix
     cur_rhs = constraint_rhs
     cur_lhs = constraint_lhs
     cur_constraint_values = jnp.dot(cur_selected_vars.astype(jnp.float32), cur_constraint_matrix.T)
-    sign = (1 - 2 * cur_x).astype(jnp.float32)
+    sign = (1 - 2 * cur_x).astype(jnp.float32) 
 
-    final_feasible_mask = jnp.zeros_like(cur_selected_vars, dtype=jnp.bool_)
+    # final_feasible_mask = jnp.zeros_like(cur_selected_vars, dtype=jnp.bool_)
     constraint_changes = jnp.einsum('bv,vc->bvc', sign, cur_constraint_matrix.T)
     updated_values = cur_constraint_values[:, None, :] + constraint_changes
         
     # 제약조건 위반 여부 확인
     violates = (updated_values < cur_lhs[None, None, :]) | (updated_values > cur_rhs[None, None, :]) # 위반 -> True
     feasible_mask = ~violates.any(axis=2) # 하나라도 위반하면 False, 만족하면 True
-    final_feasible_mask = final_feasible_mask.at[:, :].set(feasible_mask)
-    all_masks = jnp.stack(final_feasible_mask)
+    # final_feasible_mask = final_feasible_mask.at[:, :].set(feasible_mask)
+    all_masks = jnp.stack(feasible_mask)
 
-    return all_masks[None, ...]
+    return all_masks[None, ...] # 확인.
    
 
 class EBM_Experiment(Experiment):

@@ -4,7 +4,7 @@ _fields:
   experiment: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
     _convert_dict: true
     _fields:
-      batch_size: 32
+      batch_size: 10
       chain_length: 200000
       co_opt_prob: true
       decay_rate: 0.01
@@ -14,22 +14,22 @@ _fields:
       final_temperature: 0.0001
       get_additional_metrics: false
       get_estimation_error: false
-      init_temperature: 2
+      init_temperature: 1
       log_every_steps: 100
       name: CO_Experiment
-      num_models: 1
+      num_models: 100
       plot_every_steps: 10
       pt: deo
       pt_interval: 1000
-      reweight: reheat
+      reweight: mask
       run_parallel: true
       save_every_steps: 100
       save_root: ./discs/results/ilp
       save_samples: false
       shuffle_buffer_size: 0
-      t_max: 5
+      t_max: 5.0
       t_min: 0.1
-      t_schedule: exp_decay
+      t_schedule: pt
       use_tqdm: false
       window_size: 10
       window_stride: 10
@@ -41,13 +41,13 @@ _fields:
       cfg_str: r-800
       data_root: ./sco/
       formulation: max_linear_square
-      graph_type: mis
-      max_num_constraints: 10000
-      max_num_nodes: 1500
+      graph_type: sc
+      max_num_constraints: 5000
+      max_num_nodes: 1000
       name: ilp
       num_categories: 2
       num_instances: 100
-      num_models: 1
+      num_models: 100
       penalty: 1000
       rand_type: '800'
       save_dir_name: ilp

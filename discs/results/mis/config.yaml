@@ -14,7 +14,7 @@ _fields:
       final_temperature: 0.0001
       get_additional_metrics: false
       get_estimation_error: false
-      init_temperature: 1
+      init_temperature: 5
       log_every_steps: 100
       name: CO_Experiment
       num_models: 128
@@ -40,7 +40,7 @@ _fields:
     _fields:
       cfg_str: r-800
       data_root: ./sco/
-      formulation: max_linear_square
+      formulation: quadratic
       graph_type: ertest
       max_num_edges: 47885
       max_num_nodes: 800
@@ -48,7 +48,7 @@ _fields:
       num_categories: 2
       num_instances: 128
       num_models: 128
-      penalty: 100
+      penalty: 0.9
       rand_type: '800'
       save_dir_name: mis
       shape: !!python/tuple

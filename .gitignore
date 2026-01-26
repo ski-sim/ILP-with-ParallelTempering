@@ -7,4 +7,4 @@ BINARY_EBM/
 RBM_DATA/
 text_infilling_data/
 /wandb
-/results
+/discs/results
