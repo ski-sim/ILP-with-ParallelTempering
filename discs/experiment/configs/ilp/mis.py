@@ -18,8 +18,8 @@ def get_config():
           pt = 'deo',
           pt_interval = 1000,
           t_min = 0.1,
-          t_max = 5,
-          reweight= 'None',
+          t_max = 5.0,
+          reweight= 'mask',
       )
   )
   return config_dict.ConfigDict(exp_config)

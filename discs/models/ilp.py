@@ -3,7 +3,7 @@
 from discs.models import comb_ebm
 import jax.numpy as jnp
 import ml_collections
-
+import jax
 
 class ILP(comb_ebm.BinaryNodeCombEBM):
   """Max Independent Set model."""
@@ -74,11 +74,13 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
     lb = params['constraint_lhs'][:, None]
     if self.proposal_type == 'obj':
       return 0.0
+    elif self.proposal_type == 'uniform':
+      return 0.0
     elif self.proposal_type == 'obj_lagrangian':
       violation = Ax - ub +  lb - Ax
-    elif self.proposal_type == 'obj_linear':
+    elif self.proposal_type == 'max_linear':
       violation = jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) 
-    elif self.proposal_type == 'obj_square':
+    elif self.proposal_type == 'max_linear_square':
       violation = jnp.square(jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) ) 
     elif self.proposal_type == 'penalty_linear':
       violation = jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) 
@@ -111,6 +113,30 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
     logratio = logratio * params['mask'] + -1e9 * (1 - params['mask'])
     return logratio, 1, self.get_neighbor_fn
 
+  def logratio_in_neighborhood(self, params, x):
+    cur_selected_vars = (x == 1)
+    cur_x = x
+    C = params['obj_coeffs']
+    A = params['constraint_matrix'] # astype 미리 바꾸기
+    ub = params['constraint_rhs']
+    lb = params['constraint_lhs']
+
+    sign = (1 - 2 * cur_x).astype(jnp.float32) # 여기기
+    delta_f = sign * C 
+
+    cur_Ax = jnp.dot(cur_selected_vars.astype(jnp.float32),A.T)
+
+    delta_Ax = jnp.einsum('bv,vc->bvc', sign, A.T) 
+    updated_Ax  = cur_Ax [:, None, :] + delta_Ax 
+
+    # llx, logratio
+    delta_penalty = jnp.square(jnp.maximum(0, updated_Ax - ub) + jnp.maximum(0, lb - updated_Ax) )  - jnp.square(jnp.maximum(0, cur_Ax - ub) + jnp.maximum(0, lb - cur_Ax) ) [:, None, :]
+    delta_c = jnp.sum(delta_penalty, axis=-1)
+    logratio = delta_f + delta_c
+
+    ll_x = self.objective(params, x) + self.penalty(params, x)
+
+    return ll_x, logratio, 1, self.get_neighbor_fn
 
 def build_model(config):
   return ILP(config)

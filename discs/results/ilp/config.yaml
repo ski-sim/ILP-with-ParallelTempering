@@ -4,7 +4,7 @@ _fields:
   experiment: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
     _convert_dict: true
     _fields:
-      batch_size: 10
+      batch_size: 32
       chain_length: 200000
       co_opt_prob: true
       decay_rate: 0.01
@@ -17,11 +17,11 @@ _fields:
       init_temperature: 1
       log_every_steps: 100
       name: CO_Experiment
-      num_models: 100
+      num_models: 1
       plot_every_steps: 10
       pt: deo
       pt_interval: 1000
-      reweight: mask
+      reweight: None
       run_parallel: true
       save_every_steps: 100
       save_root: ./discs/results/ilp
@@ -29,7 +29,7 @@ _fields:
       shuffle_buffer_size: 0
       t_max: 5.0
       t_min: 0.1
-      t_schedule: pt
+      t_schedule: exp_decay
       use_tqdm: false
       window_size: 10
       window_stride: 10
@@ -41,14 +41,15 @@ _fields:
       cfg_str: r-800
       data_root: ./sco/
       formulation: max_linear_square
-      graph_type: sc
-      max_num_constraints: 5000
-      max_num_nodes: 1000
+      graph_type: mis
+      max_num_constraints: 10000
+      max_num_nodes: 1500
       name: ilp
       num_categories: 2
-      num_instances: 100
-      num_models: 100
+      num_instances: 20
+      num_models: 1
       penalty: 1000
+      proposal_type: obj
       rand_type: '800'
       save_dir_name: ilp
       shape: !!python/tuple
@@ -58,11 +59,11 @@ _fields:
   sampler: !!python/object:ml_collections.config_dict.config_dict.ConfigDict
     _convert_dict: true
     _fields:
-      adaptive: true
-      approx_with_grad: true
+      adaptive: false
+      approx_with_grad: false
       balancing_fn_type: SQRT
-      name: path_auxiliary
-      num_flips: 10
+      name: lbp
+      num_flips: 1
       target_acceptance_rate: 0.574
       use_fast_path: true
     _locked: false

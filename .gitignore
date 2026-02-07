@@ -8,3 +8,6 @@ RBM_DATA/
 text_infilling_data/
 /wandb
 /discs/results
+sco_test/
+wandb/
+results/

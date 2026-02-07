@@ -28,20 +28,22 @@ class CombEBM(abstractmodel.AbstractModel):
     obj = self.objective(params, x) - self.penalty(params, x)
     return obj / params['temperature']
 
-  # def forward_grad(self, params, x):
-  #   x = x.astype(jnp.float32)
-  #   # obj = self.objective(params, x) -self.penalty2(params, x)
-  #   obj = -self.penalty2(params, x)
-  #   return obj / params['temperature']
+  def forward_grad(self, params, x):
+    x = x.astype(jnp.float32)
+    obj = self.objective(params, x) -self.penalty2(params, x)
+    # obj = -self.penalty2(params, x)
+    return obj / params['temperature']
 
   def get_value_and_grad(self, params, x):
     x = x.astype(jnp.float32)  # int tensor is not differentiable
 
     def fun(z):
-      loglikelihood = self.forward(params, z)
+      # loglikelihood = self.forward(params, z)
+      loglikelihood = self.forward_grad(params, z)
       return jnp.sum(loglikelihood), loglikelihood
 
     (_, loglikelihood), grad = jax.value_and_grad(fun, has_aux=True)(x)
+    loglikelihood = self.forward(params, x)
     return loglikelihood, grad
 
   def evaluate(self, params, x):

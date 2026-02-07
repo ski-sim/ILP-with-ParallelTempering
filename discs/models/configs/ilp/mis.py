@@ -10,7 +10,7 @@ def get_model_config(cfg_str):
   rand_type = extra_cfg['r']
   num_nodes = 1500
   num_constraints = 10000
-  num_instances = 100
+  num_instances = 20
 
   model_config = dict(
       num_models=1,
@@ -21,6 +21,6 @@ def get_model_config(cfg_str):
       shape=(0,),
       rand_type=rand_type,
       formulation='max_linear_square', # indicator
-      # proposal_type='penalty_square', # grad, ll
+      proposal_type='obj', # grad, ll
   )
   return config_dict.ConfigDict(model_config)

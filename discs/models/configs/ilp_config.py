@@ -5,7 +5,7 @@ def get_config():
   model_config = config_dict.ConfigDict(
       dict(
           name='ilp',
-          graph_type='sc',
+          graph_type='mis',
           cfg_str='r-800',
           data_root='./sco/',
           penalty=1000,

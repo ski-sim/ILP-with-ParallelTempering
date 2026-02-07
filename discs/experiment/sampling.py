@@ -675,7 +675,6 @@ class CO_Experiment(Experiment):
       x = new_x
       if self.config.reweight == 'reheat':
           fake_step = fake_step + jnp.ones_like(fake_step)
-
     for step in tqdm.tqdm(range(burn_in_length, 1 + self.config.chain_length)):
       if self.config.reweight == 'reheat':
         cur_temp = t_schedule(fake_step)
@@ -811,11 +810,11 @@ class CO_Experiment(Experiment):
     cur_rhs = constraint_rhs
     cur_lhs = constraint_lhs
     cur_constraint_values = jnp.dot(cur_selected_vars.astype(jnp.float32), cur_constraint_matrix.T)
-    sign = (1 - 2 * cur_x).astype(jnp.float32) 
+    sign = (1 - 2 * cur_x).astype(jnp.float32) # 여기기
 
     # final_feasible_mask = jnp.zeros_like(cur_selected_vars, dtype=jnp.bool_)
-    constraint_changes = jnp.einsum('bv,vc->bvc', sign, cur_constraint_matrix.T)
-    updated_values = cur_constraint_values[:, None, :] + constraint_changes
+    constraint_changes = jnp.einsum('bv,vc->bvc', sign, cur_constraint_matrix.T) # Ax -Ax'
+    updated_values = cur_constraint_values[:, None, :] + constraint_changes # C row 추가. cx+penalty*max(Ax-b,0)
         
     # 제약조건 위반 여부 확인
     violates = (updated_values < cur_lhs[None, None, :]) | (updated_values > cur_rhs[None, None, :]) # 위반 -> True

@@ -49,7 +49,6 @@ class PAFSNoReplacement(PathAuxiliarySampler):
       self.target_acceptance_rate = config.sampler.target_acceptance_rate
     self.num_flips = config.sampler.get('num_flips', 1)
     self.approx_with_grad = config.sampler.get('approx_with_grad', True)
-
   def select_sample(self, rng, num_calls, log_acc,
                     current_sample, new_sample, sampler_state):
     y, new_state = super().select_sample(
@@ -75,8 +74,13 @@ class PAFSNoReplacement(PathAuxiliarySampler):
         logratio = (1 - 2 * x) * grad_x
       num_calls = 2
     else:
-      ll_x, logratio, num_calls, _ = model.logratio_in_neighborhood(
-          model_param, x)
+      # Lazy initialization: create neighborhood_fn only once
+      if not hasattr(self, 'neighborhood_fn'):
+        # self.neighborhood_fn = jax.jit(jax.vmap(model.logratio_in_neighborhood, in_axes=(0, 0)))
+        self.neighborhood_fn = model.logratio_in_neighborhood
+      # ll_x, logratio, num_calls, _ = model.logratio_in_neighborhood(
+      #     model_param, x)
+      ll_x, logratio, num_calls, _ = self.neighborhood_fn(model_param, x)
       assert logratio.shape == x.shape
     logits = self.apply_weight_function_logscale(logratio)
     if x_mask is not None:

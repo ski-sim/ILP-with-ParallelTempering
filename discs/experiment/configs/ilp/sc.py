@@ -6,7 +6,7 @@ def get_config():
   """Get config for er benchmark graphs."""
   exp_config = dict(
       experiment=dict(
-          batch_size=10,
+          batch_size=32,
           t_schedule='pt',
           chain_length=200000,
           log_every_steps=100,

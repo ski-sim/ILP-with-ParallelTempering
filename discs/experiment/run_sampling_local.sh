@@ -1,7 +1,7 @@
 model=ilp
-graph_type=sc
-sampler=path_auxiliary
-export CUDA_VISIBLE_DEVICES=5
+graph_type=mis
+sampler=lbp
+export CUDA_VISIBLE_DEVICES=0
 # export XLA_FLAGS='--xla_force_host_platform_device_count=4'
 
 default="default_value"

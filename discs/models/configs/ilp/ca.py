@@ -21,6 +21,6 @@ def get_model_config(cfg_str):
       shape=(0,),
       rand_type=rand_type,
       formulation='max_linear_square', # indicator
-      proposal_type='obj_linear', # grad, ll
+      proposal_type='obj', # grad, obj_square, penalty_square
   )
   return config_dict.ConfigDict(model_config)
