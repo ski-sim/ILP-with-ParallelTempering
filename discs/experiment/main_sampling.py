@@ -59,36 +59,59 @@ def main(_):
   update_save_dir(config)
   utils.setup_logging(config)
 
-  
-  # model
-  model_mod = importlib.import_module('discs.models.%s' % config.model.name)
-  model = model_mod.build_model(config)
+  # t_min_list = [0.01,0.02,0.05,0.1,0.2,0.5,1.0,2.0]
+  # t_max_list = [0.1,0.2,0.5,1.0,2.0,5.0]
+  # pt_intervals = [200,500,1000]
+  # batch_sizes = [10,20,50]
+  t_min_list = [0.01,0.02,0.05,0.1,0.2,0.5,1.0,2.0]
+  # t_max_list = [2.0,5.0]
+  t_max_list = [0.1,0.2,0.5,1.0]
+  # pt_intervals = [200]
+  # pt_intervals = [500]
+  pt_intervals = [1000]
+  batch_sizes = [10]
+  # batch_sizes = [20]
+  # batch_sizes = [50]
+  for t_min in t_min_list:
+    for t_max in t_max_list:
+      for batch_size in batch_sizes:
+        for pt_interval in pt_intervals:
+          if t_min >= t_max:
+            continue
+          config.experiment.t_min = t_min
+          config.experiment.t_max = t_max
+          config.experiment.batch_size = batch_size
+          config.experiment.pt_interval = pt_interval
 
-  # sampler
-  sampler_mod = importlib.import_module(
-      'discs.samplers.%s' % config.sampler.name
-  )
-  sampler = sampler_mod.build_sampler(config)
+          # model
+          model_mod = importlib.import_module('discs.models.%s' % config.model.name)
+          model = model_mod.build_model(config)
 
-  # experiment
-  experiment_mod = getattr(
-      importlib.import_module('discs.experiment.sampling'),
-      f'{config.experiment.name}',
-  )
-  experiment = experiment_mod(config)
+          # sampler
+          sampler_mod = importlib.import_module(
+              'discs.samplers.%s' % config.sampler.name
+          )
+          sampler = sampler_mod.build_sampler(config)
 
-  # evaluator
-  evaluator_mod = importlib.import_module(
-      'discs.evaluators.%s' % config.experiment.evaluator
-  )
-  evaluator = evaluator_mod.build_evaluator(config)
+          # experiment
+          experiment_mod = getattr(
+              importlib.import_module('discs.experiment.sampling'),
+              f'{config.experiment.name}',
+          )
+          experiment = experiment_mod(config)
 
-  # saver
-  saver = saver_mod.build_saver(config)
-  
+          # evaluator
+          evaluator_mod = importlib.import_module(
+              'discs.evaluators.%s' % config.experiment.evaluator
+          )
+          evaluator = evaluator_mod.build_evaluator(config)
 
-  # chain generation
-  experiment.get_results(model, sampler, evaluator, saver)
+          # saver
+          saver = saver_mod.build_saver(config)
+          
+
+          # chain generation
+          experiment.get_results(model, sampler, evaluator, saver)
 
 
 if __name__ == '__main__':

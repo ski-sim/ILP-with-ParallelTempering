@@ -19,7 +19,7 @@ def get_config():
           pt_interval = 1000,
           t_min = 0.1,
           t_max = 5.0,
-          reweight= 'mask',
+          reweight= 'None',
       )
   )
   return config_dict.ConfigDict(exp_config)
