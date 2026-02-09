@@ -99,44 +99,36 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
       return jnp.dot(x, params['obj_coeffs'])
 
   def logratio_in_neighborhood(self, params, x):
-    edge_from = params['bidir_edge_from']
-    edge_to = params['bidir_edge_to']
+    # x shape: [batch, N]
+    A = params['constraint_matrix']  # [M, N]
+    c = params['obj_coeffs']         # [N]
+    ub = params['constraint_rhs']    # [M]
+    lb = params['constraint_lhs']    # [M]
+    temp = params.get('temperature', 1.0)
 
-    gather2dst = x[:, edge_to]
-    diff_penalty = self.penalty_coeff * gather2dst
-    diff_arr = jnp.zeros(x.shape, dtype=diff_penalty.dtype)
-    diff_arr = diff_arr.at[jnp.expand_dims(jnp.arange(x.shape[0]), axis=1),
-                           edge_from].add(diff_penalty)
+    Ax = jnp.dot(A, x.T)  # current Ax [M, batch]
+    obj_x = self.objective(params, x)  # current c^Tx [batch]
+    v_curr = jnp.maximum(0, Ax - ub[:, None]) + jnp.maximum(0, lb[:, None] - Ax)  # [M, batch]
+    penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=0)  # current penalty [batch]
+    ll_x = (obj_x - penalty_x) / temp  # current -energy [batch]
 
-    sign = (1 - x * 2) * params['mask']
-    logratio = (sign - sign * diff_arr) / params['temperature']
-    logratio = logratio * params['mask'] + -1e9 * (1 - params['mask'])
-    return logratio, 1, self.get_neighbor_fn
+    # Deltas for flipping each bit j
+    delta_x = 1 - 2 * x  # [batch, N]
 
-  def logratio_in_neighborhood(self, params, x):
-    cur_selected_vars = (x == 1)
-    cur_x = x
-    C = params['obj_coeffs']
-    A = params['constraint_matrix'] # astype 미리 바꾸기
-    ub = params['constraint_rhs']
-    lb = params['constraint_lhs']
+    # Change in objective: c_j * delta_x_j
+    delta_obj = c[None, :] * delta_x  # [batch, N]
+    if self.config.graph_type == 'sc':
+        delta_obj = -delta_obj
 
-    sign = (1 - 2 * cur_x).astype(jnp.float32) # 여기기
-    delta_f = sign * C 
+    # Change in Penalty
+    Ax_new = Ax[:, :, None] + A[:, None, :] * delta_x[None, :, :]
+    v_new = jnp.maximum(0, Ax_new - ub[:, None, None]) + jnp.maximum(0, lb[:, None, None] - Ax_new)
+    penalty_x_new = self.penalty_coeff * jnp.sum(jnp.square(v_new), axis=0)
 
-    cur_Ax = jnp.dot(cur_selected_vars.astype(jnp.float32),A.T)
-
-    delta_Ax = jnp.einsum('bv,vc->bvc', sign, A.T) 
-    updated_Ax  = cur_Ax [:, None, :] + delta_Ax 
-
-    # llx, logratio
-    delta_penalty = jnp.square(jnp.maximum(0, updated_Ax - ub) + jnp.maximum(0, lb - updated_Ax) )  - jnp.square(jnp.maximum(0, cur_Ax - ub) + jnp.maximum(0, lb - cur_Ax) ) [:, None, :]
-    delta_c = jnp.sum(delta_penalty, axis=-1)
-    logratio = delta_f + delta_c
-
-    ll_x = self.objective(params, x) + self.penalty(params, x)
+    # Calculate Log-Ratios
+    ll_x_new = (obj_x[:, None] + delta_obj - penalty_x_new) / temp
+    logratio = ll_x_new - ll_x[:, None]
 
     return ll_x, logratio, 1, self.get_neighbor_fn
-
 def build_model(config):
   return ILP(config)

@@ -6,22 +6,18 @@ import jax
 import jax.numpy as jnp
 from jax.scipy import special
 import ml_collections
-import pdb
+
 
 class PathAuxiliarySampler(locallybalanced.LocallyBalancedSampler):
   """Path auxiliary sampler."""
 
   def step(self, model, rng, x, model_param, state, x_mask=None):
-    if self.num_categories != 2:
-      x = jax.nn.one_hot(x, self.num_categories, dtype=jnp.float32)
-      if x_mask is not None:
-        x_mask = jnp.expand_dims(x_mask, axis=-1)
     rng_new_sample, rng_acceptance = jax.random.split(rng)
     ll_x, y, trajectory, num_calls_forward = self.proposal(
-        model, rng_new_sample, x, model_param, state, x_mask)
+        model, rng_new_sample, x, model_param, state)
     ll_x2y = trajectory['ll_x2y']
     ll_y, ll_y2x, num_calls_backward = self.ll_y2x(
-        model, x, model_param, trajectory, y, x_mask)
+        model, x, model_param, trajectory, y)
 
     log_acc = ll_y + ll_y2x - ll_x - ll_x2y
     new_x, new_state = self.select_sample(
@@ -65,82 +61,63 @@ class PAFSNoReplacement(PathAuxiliarySampler):
     state['radius'] = jnp.ones(shape=(), dtype=jnp.float32) * self.num_flips
     return state
 
-  def get_local_dist(self, model, x, model_param, x_mask):
-    if self.approx_with_grad:
-      ll_x, grad_x = model.get_value_and_grad(model_param, x)
-      if self.num_categories != 2:
-        logratio = grad_x - jnp.sum(grad_x * x, axis=-1, keepdims=True)
-      else:
-        logratio = (1 - 2 * x) * grad_x
-      num_calls = 2
-    else:
-      # Lazy initialization: create neighborhood_fn only once
-      if not hasattr(self, 'neighborhood_fn'):
-        # self.neighborhood_fn = jax.jit(jax.vmap(model.logratio_in_neighborhood, in_axes=(0, 0)))
-        self.neighborhood_fn = model.logratio_in_neighborhood
-      # ll_x, logratio, num_calls, _ = model.logratio_in_neighborhood(
-      #     model_param, x)
-      ll_x, logratio, num_calls, _ = self.neighborhood_fn(model_param, x)
-      assert logratio.shape == x.shape
+  def get_local_dist(self, model, x, model_param):
+    # Lazy initialization: create neighborhood_fn only once
+    if not hasattr(self, 'neighborhood_fn'):
+      # self.neighborhood_fn = jax.jit(jax.vmap(model.logratio_in_neighborhood, in_axes=(0, 0)))
+      self.neighborhood_fn = model.logratio_in_neighborhood
+    ll_x, logratio, num_calls, _ = self.neighborhood_fn(model_param, x)
+
     logits = self.apply_weight_function_logscale(logratio)
-    if x_mask is not None:
-      logits = logits * x_mask + -1e9 * (1 - x_mask) # 제거
     if self.num_categories != 2:
       logits = logits * (1 - x) + x * -1e9
     log_prob = jax.nn.log_softmax(jnp.reshape(logits, (x.shape[0], -1)), -1)
     return ll_x, log_prob, num_calls
 
-  def proposal(self, model, rng, x, model_param, state, x_mask):
+  def proposal(self, model, rng, x, model_param, state):
     ll_x, log_prob, num_calls = self.get_local_dist(
-        model, x, model_param, x_mask)
-    if self.adaptive:
-      num_samples = jnp.clip(jnp.round(state['radius']).astype(jnp.int32),
-                             a_min=1, a_max=math.prod(self.sample_shape))
-    else:
-      num_samples = self.num_flips
-    x_shape = x.shape
-    x = jnp.reshape(x, (x.shape[0], -1))
+        model, x, model_param)
+
+    num_samples = self.num_flips
+
     if self.num_categories > 2:
       log_prob_all = jnp.reshape(log_prob,
                                  [log_prob.shape[0], -1, self.num_categories])
       log_prob = special.logsumexp(log_prob_all, axis=-1)
       log_prob_all = jax.nn.log_softmax(log_prob_all, axis=-1)
       x = jnp.reshape(x, log_prob_all.shape)
+
     selected_idx, ll_selected = math.multinomial(
-        rng, log_prob, num_samples, replacement=False, return_ll=True,
-        is_nsample_const=not self.adaptive, need_ordering_info=True)
-    if self.adaptive:
-      mask = selected_idx['selected_mask']
-      if self.num_categories > 2:
-        rng, _ = jax.random.split(rng)
-        new_val = jax.random.categorical(rng, log_prob_all)
-        new_val = jax.nn.one_hot(new_val, self.num_categories)
-        ll_val = jnp.sum(new_val * log_prob_all, axis=-1) * mask
-        mask = jnp.expand_dims(mask, axis=-1)
-        ll_selected = ll_selected + ll_val
-      else:
-        new_val = 1 - x
-      y = x * (1 - mask) + mask * new_val
+      rng,
+      log_prob,
+      num_samples,
+      replacement=False,
+      return_ll=True,
+      is_nsample_const=True
+    )
+
+    rows = jnp.expand_dims(jnp.arange(x.shape[0]), axis=1)
+    if self.num_categories > 2:
+      val_logprob = log_prob_all[rows, selected_idx]
+      rng, _ = jax.random.split(rng)
+      new_val = jax.random.categorical(rng, val_logprob)
+      new_val = jax.nn.one_hot(new_val, self.num_categories)
     else:
-      rows = jnp.expand_dims(jnp.arange(x.shape[0]), axis=1)
-      if self.num_categories > 2:
-        val_logprob = log_prob_all[rows, selected_idx]
-        rng, _ = jax.random.split(rng)
-        new_val = jax.random.categorical(rng, val_logprob)
-        new_val = jax.nn.one_hot(new_val, self.num_categories)
-      else:
-        new_val = 1 - x[rows, selected_idx]
-      y = x.at[rows, selected_idx].set(new_val)
-    y = jnp.reshape(y, x_shape)
+      new_val = 1 - x[rows, selected_idx]
+    y = x.at[rows, selected_idx].set(new_val)
+
+    y = jnp.reshape(y, x.shape)
     trajectory = {
         'll_x2y': jnp.sum(ll_selected, axis=-1),
         'selected_idx': selected_idx,
     }
     return ll_x, y, trajectory, num_calls
 
-  def ll_y2x(self, model, x, model_param, forward_trajectory, y, x_mask):
+  def ll_y2x(self, model, x, model_param, forward_trajectory, y):
     ll_y, log_prob, num_calls = self.get_local_dist(
-        model, y, model_param, x_mask)
+      model, y, model_param
+    )
+
     if self.num_categories > 2:
       log_prob_all = jnp.reshape(log_prob,
                                  [log_prob.shape[0], -1, self.num_categories])

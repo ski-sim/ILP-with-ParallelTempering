@@ -7,7 +7,7 @@ def get_config():
   exp_config = dict(
       experiment=dict(
           batch_size=32,
-          t_schedule='pt',
+          t_schedule='exp_decay',
           chain_length=200000,
           log_every_steps=100,
           save_every_steps=100,
@@ -19,7 +19,7 @@ def get_config():
           pt_interval = 1000,
           t_min = 0.1,
           t_max = 5.0,
-          reweight= 'mask',
+          reweight= 'None',
       )
   )
   return config_dict.ConfigDict(exp_config)
