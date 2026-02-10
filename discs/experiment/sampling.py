@@ -564,9 +564,9 @@ class CO_Experiment(Experiment):
     stp_burnin, stp_mixing, get_hop, obj_fn, _, mask_fn, obj_only_fn, penalty_fn, pt_fn = compiled_fns
     fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
     # burn in
-    burn_in_length = int(self.config.chain_length * self.config.ess_ratio) + 1
+    # burn_in_length = int(self.config.chain_length * self.config.ess_ratio) + 1
+    burn_in_length = self.config.chain_length
     wandb.init()
-
     # reheated mechanism
     best_eval_val = jnp.ones(self.config.num_models) * -jnp.inf
     value_chain = jnp.zeros((100, self.config.num_models, self.config.batch_size))
@@ -590,14 +590,13 @@ class CO_Experiment(Experiment):
     for step in tqdm.tqdm(range(1, burn_in_length)):
       if self.config.reweight == 'reheat':
         cur_temp = t_schedule(fake_step)
-        cur_temp = jnp.array(cur_temp).reshape(params['temperature'].shape)
-        params['temperature'] = cur_temp
+        params['temperature'] = jnp.array(cur_temp).reshape(params['temperature'].shape)
       else:
         cur_temp = t_schedule(step)
         params['temperature'] = init_temperature[:, None] * cur_temp
       rng = jax.random.fold_in(rng, step)
       step_rng = fn_reshape(jax.random.split(rng, math.prod(bshape)))
-      
+      start = time.time()
       if self.config.reweight == 'mask':
         params['mask'] = mask_fn(x, params)
         
@@ -612,6 +611,7 @@ class CO_Experiment(Experiment):
       # parallel tempering
       if self.config.t_schedule == 'pt' and self.config.pt in ['deo', 'seo'] and step % self.config.pt_interval == 0:
         new_x, is_accept = pt_fn(new_x, obj_fn(samples=new_x, params=params), params['temperature'], rng, step)
+      running_time += time.time() - start
       # reheat mechanism
       if self.config.reweight == 'reheat':
         eval_val = obj_fn(samples=new_x, params=params)
@@ -626,7 +626,7 @@ class CO_Experiment(Experiment):
         best_ratio = jnp.maximum(ratio, best_ratio)
         sample_mask = sample_mask.reshape(best_ratio.shape)
         print(f'cur_temp: {cur_temp}, eval_val: {eval_val[0]}, obj: {obj_only_fn(params, new_x)[0]}, penalty: {penalty_val[0]}')
-        wandb.log({'burnin/step':step, 'burnin/best_ratio': jnp.mean(best_ratio),'burnin/penalty':jnp.mean(penalty_val)})
+        wandb.log({f'current_obj{self.sample_idx}': jnp.mean(eval_val),f'best_obj{self.sample_idx}': jnp.mean(best_ratio),f'penalty{self.sample_idx}':jnp.mean(penalty_val)})
         br = np.array(best_ratio[sample_mask])
         br = jax.device_put(br, jax.devices('cpu')[0])
         chain.append(br)
@@ -671,90 +671,22 @@ class CO_Experiment(Experiment):
             max_specific_heat = jnp.maximum(specific_heat, max_specific_heat)
             reheat_step = jnp.where(specific_heat >= max_specific_heat, fake_step, reheat_step)
             fake_step = jnp.where(trapped_num >= trapped_threshold_length, reheat_step - jnp.ones_like(reheat_step), fake_step)
+      # if self.config.reweight == 'reheat': # burn out mechanism
+      #   # we don't calculate specific heat for the mixing phase, since we don't update the critical temperature anymore in case it becomes too small
+      #   value_diff = jnp.abs(eval_val - old_value)
+      #   trapped_num = jnp.where(jnp.abs(value_diff) < threshold, trapped_num + jnp.ones_like(trapped_num),
+      #                           jnp.zeros_like(trapped_num))
+      #   old_value = eval_val
+      #   reheat_time_array = jnp.where(trapped_num >= trapped_threshold_length, jnp.ones_like(trapped_num),
+      #                                 jnp.zeros_like(trapped_num))
+      #   reheat_time = reheat_time + reheat_time_array
+      #   fake_step = jnp.where(trapped_num >= trapped_threshold_length, reheat_step - jnp.ones_like(reheat_step), fake_step)
 
       x = new_x
       if self.config.reweight == 'reheat':
           fake_step = fake_step + jnp.ones_like(fake_step)
 
-    for step in tqdm.tqdm(range(burn_in_length, 1 + self.config.chain_length)):
-      if self.config.reweight == 'reheat':
-        cur_temp = t_schedule(fake_step)
-        params['temperature'] = jnp.array(cur_temp).reshape(params['temperature'].shape)
-      else:
-        cur_temp = t_schedule(step)
-        params['temperature'] = init_temperature[:, None] * cur_temp
-      rng = jax.random.fold_in(rng, step)
-      step_rng = fn_reshape(jax.random.split(rng, math.prod(bshape)))
-      start = time.time()
-      if self.config.reweight == 'mask':
-        params['mask'] = mask_fn(x, params)
-      new_x, state, acc = stp_mixing(
-          rng=step_rng,
-          x=x,
-          model_param=params,
-          state=state,
-          x_mask=params['mask'],
-      )
-      # parallel tempering
-      if self.config.t_schedule == 'pt' and self.config.pt in ['deo', 'seo'] and step % self.config.pt_interval == 0:
-        new_x, is_accept = pt_fn(new_x, obj_fn(samples=new_x, params=params), params['temperature'], rng, step)
-      running_time += time.time() - start
-      if self.config.reweight == 'reheat':
-        eval_val = obj_fn(samples=new_x, params=params)
-        eval_val = eval_val.reshape(self.config.num_models, -1)
-      if step % self.config.log_every_steps == 0:
-        eval_val = obj_fn(samples=new_x, params=params)
-        eval_val = eval_val.reshape(self.config.num_models, -1)
-        penalty_val = penalty_fn(params, new_x)
-        eval_val = jnp.where(penalty_val > 0, -jnp.inf, eval_val)
-        ratio = jnp.max(eval_val, axis=-1).reshape(-1) / self.ref_obj
-        is_better = ratio > best_ratio
-        best_ratio = jnp.maximum(ratio, best_ratio)
-        sample_mask = sample_mask.reshape(best_ratio.shape)
-        print(f'cur_temp: {cur_temp}, eval_val: {eval_val[0]}, obj: {obj_only_fn(params, new_x)[0]}, penalty: {penalty_val[0]}')
-        wandb.log({'mixing/step':step, 'mixing/best_ratio': jnp.mean(best_ratio),'mixing/penalty':jnp.mean(penalty_fn(params, new_x))})
-        br = np.array(best_ratio[sample_mask])
-        br = jax.device_put(br, jax.devices('cpu')[0])
-        chain.append(br)
-
-        if self.config.save_samples or self.config_model.name == 'normcut':
-          step_chosen = jnp.argmax(eval_val, axis=-1, keepdims=True)
-          rnew_x = jnp.reshape(
-              new_x,
-              (self.config.num_models, self.config.batch_size)
-              + self.config_model.shape,
-          )
-          chosen_samples = jnp.take_along_axis(
-              rnew_x, jnp.expand_dims(step_chosen, -1), axis=-2
-          )
-          chosen_samples = jnp.squeeze(chosen_samples, -2)
-          best_samples = jnp.where(
-              jnp.expand_dims(is_better, -1), chosen_samples, best_samples
-          )
-
-      if self.config.get_additional_metrics:
-        # avg over all models
-        acc = jnp.mean(acc)
-        acc_ratios.append(acc)
-        # hop avg over batch size and num models
-        hops.append(get_hop(x, new_x))
-      if self.config.reweight == 'reheat':
-        # we don't calculate specific heat for the mixing phase, since we don't update the critical temperature anymore in case it becomes too small
-        value_diff = jnp.abs(eval_val - old_value)
-        trapped_num = jnp.where(jnp.abs(value_diff) < threshold, trapped_num + jnp.ones_like(trapped_num),
-                                jnp.zeros_like(trapped_num))
-        old_value = eval_val
-        reheat_time_array = jnp.where(trapped_num >= trapped_threshold_length, jnp.ones_like(trapped_num),
-                                      jnp.zeros_like(trapped_num))
-        reheat_time = reheat_time + reheat_time_array
-        fake_step = jnp.where(trapped_num >= trapped_threshold_length, reheat_step - jnp.ones_like(reheat_step), fake_step)
-
-
-
-      x = new_x
-      if self.config.reweight == 'reheat':
-        fake_step = fake_step + jnp.ones_like(fake_step)
-
+    
     if not (self.config.save_samples or self.config_model.name == 'normcut'):
       best_samples = []
     # saver.save_co_resuts(

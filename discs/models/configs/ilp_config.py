@@ -5,10 +5,10 @@ def get_config():
   model_config = config_dict.ConfigDict(
       dict(
           name='ilp',
-          graph_type='sc',
+          graph_type='ca',
           cfg_str='r-800',
           data_root='./sco/',
-          penalty=100,
+          penalty=1000,
       )
   )
   model_config['save_dir_name'] = model_config['name']
