@@ -675,6 +675,7 @@ class CO_Experiment(Experiment):
       x = new_x
       if self.config.reweight == 'reheat':
           fake_step = fake_step + jnp.ones_like(fake_step)
+
     for step in tqdm.tqdm(range(burn_in_length, 1 + self.config.chain_length)):
       if self.config.reweight == 'reheat':
         cur_temp = t_schedule(fake_step)
@@ -710,6 +711,7 @@ class CO_Experiment(Experiment):
         is_better = ratio > best_ratio
         best_ratio = jnp.maximum(ratio, best_ratio)
         sample_mask = sample_mask.reshape(best_ratio.shape)
+        print(f'cur_temp: {cur_temp}, eval_val: {eval_val[0]}, obj: {obj_only_fn(params, new_x)[0]}, penalty: {penalty_val[0]}')
         wandb.log({'mixing/step':step, 'mixing/best_ratio': jnp.mean(best_ratio),'mixing/penalty':jnp.mean(penalty_fn(params, new_x))})
         br = np.array(best_ratio[sample_mask])
         br = jax.device_put(br, jax.devices('cpu')[0])

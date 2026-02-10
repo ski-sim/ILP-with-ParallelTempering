@@ -1,9 +1,6 @@
-"""Max Independent Set model."""
-
 from discs.models import comb_ebm
 import jax.numpy as jnp
 import ml_collections
-import jax
 
 class ILP(comb_ebm.BinaryNodeCombEBM):
   """Max Independent Set model."""
@@ -106,10 +103,12 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
     lb = params['constraint_lhs']    # [M]
     temp = params.get('temperature', 1.0)
 
-    Ax = jnp.dot(A, x.T)  # current Ax [M, batch]
-    obj_x = self.objective(params, x)  # current c^Tx [batch]
-    v_curr = jnp.maximum(0, Ax - ub[:, None]) + jnp.maximum(0, lb[:, None] - Ax)  # [M, batch]
-    penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=0)  # current penalty [batch]
+    Ax = jnp.einsum('bn,nm->bm', x, A.T)  # current Ax [batch, M]
+    obj_x = jnp.einsum('bn,n->b', x, c)  # current c^Tx [batch]
+    if self.config.graph_type == 'sc':
+      obj_x = -obj_x
+    v_curr = jnp.maximum(0, Ax - ub[None, :]) + jnp.maximum(0, lb[None, :] - Ax)  # [batch, M]
+    penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=-1)  # current penalty [batch]
     ll_x = (obj_x - penalty_x) / temp  # current -energy [batch]
 
     # Deltas for flipping each bit j
@@ -121,14 +120,15 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         delta_obj = -delta_obj
 
     # Change in Penalty
-    Ax_new = Ax[:, :, None] + A[:, None, :] * delta_x[None, :, :]
-    v_new = jnp.maximum(0, Ax_new - ub[:, None, None]) + jnp.maximum(0, lb[:, None, None] - Ax_new)
-    penalty_x_new = self.penalty_coeff * jnp.sum(jnp.square(v_new), axis=0)
+    Ax_new = Ax[:, :, None] + A[None, :, :] * delta_x[:, None, :]  # [batch, M, N]
+    v_new = jnp.maximum(0, Ax_new - ub[None, :, None]) + jnp.maximum(0, lb[None, :, None] - Ax_new)
+    penalty_x_new = self.penalty_coeff * jnp.sum(jnp.square(v_new), axis=-1)  # [batch, M]
 
     # Calculate Log-Ratios
     ll_x_new = (obj_x[:, None] + delta_obj - penalty_x_new) / temp
     logratio = ll_x_new - ll_x[:, None]
 
     return ll_x, logratio, 1, self.get_neighbor_fn
+
 def build_model(config):
   return ILP(config)

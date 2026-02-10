@@ -9,7 +9,7 @@ setup(
     packages=find_namespace_packages(),
     install_requires=[
         'ml_collections',
-        'numpy',
+        'numpy<2',
         'matplotlib',
         'tqdm',
         'tensorflow',
@@ -24,5 +24,7 @@ setup(
         'tensorboard',
         'pickle5',
         'nltk',
+        'pyscipopt',
+        'wandb',
     ],
 )

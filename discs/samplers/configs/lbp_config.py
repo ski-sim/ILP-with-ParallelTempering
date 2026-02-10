@@ -6,11 +6,7 @@ from ml_collections import config_dict
 def get_config():
   sampler_config = dict(
       name='lbp',
-      use_fast_path=True,
       num_flips=1,
-      adaptive=False,
-      target_acceptance_rate=0.574,
       balancing_fn_type='SQRT',
-      approx_with_grad=False,
   )
   return config_dict.ConfigDict(sampler_config)
