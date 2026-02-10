@@ -122,7 +122,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
     # Change in Penalty
     Ax_new = Ax[:, :, None] + A[None, :, :] * delta_x[:, None, :]  # [batch, M, N]
     v_new = jnp.maximum(0, Ax_new - ub[None, :, None]) + jnp.maximum(0, lb[None, :, None] - Ax_new)
-    penalty_x_new = self.penalty_coeff * jnp.sum(jnp.square(v_new), axis=-1)  # [batch, M]
+    penalty_x_new = self.penalty_coeff * jnp.sum(jnp.square(v_new), axis=1)  # [batch, N]
 
     # Calculate Log-Ratios
     ll_x_new = (obj_x[:, None] + delta_obj - penalty_x_new) / temp

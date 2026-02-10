@@ -10,7 +10,7 @@ def get_model_config(cfg_str):
   rand_type = extra_cfg['r']
   num_nodes = 4000
   num_constraints = 5000
-  num_instances = 100
+  num_instances = 20
 
   model_config = dict(
       num_models=1,
