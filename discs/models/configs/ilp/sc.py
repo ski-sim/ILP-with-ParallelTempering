@@ -20,7 +20,7 @@ def get_model_config(cfg_str):
       num_categories=2,
       shape=(0,),
       rand_type=rand_type,
-      formulation='max_linear_square', # indicator
+      formulation='max_linear', # indicator
       proposal_type='obj', # grad, ll
   )
   return config_dict.ConfigDict(model_config)

@@ -565,7 +565,7 @@ class CO_Experiment(Experiment):
     fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
     # burn in
     # burn_in_length = int(self.config.chain_length * self.config.ess_ratio) + 1
-    burn_in_length = self.config.chain_length
+    burn_in_length = self.config.chain_length+1
     wandb.init()
     # reheated mechanism
     best_eval_val = jnp.ones(self.config.num_models) * -jnp.inf

@@ -8,7 +8,7 @@ def get_model_config(cfg_str):
   """Get config for sc benchmark graphs."""
   extra_cfg = utils.parse_cfg_str(cfg_str)
   rand_type = extra_cfg['r']
-  num_nodes = 1500
+  num_nodes = 3000
   num_constraints = 10000
   num_instances = 20
 

@@ -8,14 +8,47 @@ from discs.common import utils
 import discs.common.experiment_saver as saver_mod
 from ml_collections import config_flags
 
-
 FLAGS = flags.FLAGS
+
+# Config file flags
 _EXPERIMENT_CONFIG = config_flags.DEFINE_config_file(
     'config', './discs/common/configs.py'
 )
 _MODEL_CONFIG = config_flags.DEFINE_config_file('model_config')
 _SAMPLER_CONFIG = config_flags.DEFINE_config_file('sampler_config')
 _RUN_LOCAL = flags.DEFINE_boolean('run_local', False, 'if runnng local')
+
+# Model flags
+flags.DEFINE_string('model', 'ilp', 'model')
+flags.DEFINE_string('graph_type', 'mis', 'graph_type')
+flags.DEFINE_string('cfg_str', 'r-800', 'cfg_str')
+flags.DEFINE_string('data_root', './sco/', 'data_root')
+flags.DEFINE_float('penalty_weight', 10, 'penalty_weight')
+flags.DEFINE_string('save_dir_name', 'ilp', 'save_dir_name')
+flags.DEFINE_integer('num_models', 1, 'num_models')
+flags.DEFINE_integer('max_num_nodes', 1500, 'max_num_nodes')
+flags.DEFINE_integer('max_num_constraints', 10000, 'max_num_constraints')
+flags.DEFINE_integer('num_instances', 20, 'num_instances')
+flags.DEFINE_integer('num_categories', 2, 'num_categories')
+flags.DEFINE_string('rand_type', 'r-800', 'rand_type')
+flags.DEFINE_string('formulation', 'max_linear_square', 'formulation')
+flags.DEFINE_string('proposal_type', 'obj', 'proposal_type')
+
+# Experiment flags
+flags.DEFINE_integer('batch_size', 32, 'batch_size')
+flags.DEFINE_string('t_schedule', 'exp_decay', 't_schedule')
+flags.DEFINE_integer('chain_length', 100000, 'chain_length')
+flags.DEFINE_integer('log_every_steps', 100, 'log_every_steps')
+flags.DEFINE_integer('save_every_steps', 100, 'save_every_steps')
+flags.DEFINE_float('decay_rate', 0.01, 'decay_rate')
+flags.DEFINE_string('save_root', './discs/results', 'save_root')
+flags.DEFINE_string('pt', 'deo', 'pt')
+flags.DEFINE_integer('pt_interval', 1000, 'pt_interval')
+flags.DEFINE_float('init_temperature', 5, 'init_temperature')
+flags.DEFINE_float('final_temperature', 0.0001, 'final_temperature')
+flags.DEFINE_float('t_min', 0.1, 't_min')
+flags.DEFINE_float('t_max', 5.0, 't_max')
+flags.DEFINE_string('reweight', 'None', 'reweight')
 
 
 def update_save_dir(config):
@@ -25,93 +58,69 @@ def update_save_dir(config):
     config.experiment.save_root = save_root
 
 
-def get_main_config():
+def get_main_config(FLAGS):
   """Merge experiment, model and sampler config."""
-  config = common_configs.get_config()
-  if (
-      'graph_type' not in _MODEL_CONFIG.value
-      and 'bert_model' not in _MODEL_CONFIG.value
-  ):
-    config.update(_EXPERIMENT_CONFIG.value)
+  config = common_configs.get_config(FLAGS)
+  # if (
+  #     'graph_type' not in _MODEL_CONFIG.value
+  #     and 'bert_model' not in _MODEL_CONFIG.value
+  # ):
+  #   config.update(_EXPERIMENT_CONFIG.value)
   config.sampler.update(_SAMPLER_CONFIG.value)
-  config.model.update(_MODEL_CONFIG.value)
-  if config.model.get('graph_type', None):
-    graph_config = importlib.import_module(
-        'discs.models.configs.%s.%s'
-        % (config.model['name'], config.model['graph_type'])
-    )
-    config.model.update(graph_config.get_model_config(config.model['cfg_str']))
-    co_exp_default_config = importlib.import_module(
-        'discs.experiment.configs.co_experiment'
-    )
-    config.experiment.update(co_exp_default_config.get_co_default_config())
-    config.update(_EXPERIMENT_CONFIG.value)
-    config.experiment.num_models = config.model.num_models
+  # config.model.update(_MODEL_CONFIG.value)
+  # if config.model.get('graph_type', None):
+  #   graph_config = importlib.import_module(
+  #       'discs.models.configs.%s.%s'
+  #       % (config.model['name'], config.model['graph_type'])
+  #   )
+  #   config.model.update(graph_config.get_model_config(config.model['cfg_str']))
+  #   co_exp_default_config = importlib.import_module(
+  #       'discs.experiment.configs.co_experiment'
+  #   )
+  #   config.experiment.update(co_exp_default_config.get_co_default_config())
+  #   config.update(_EXPERIMENT_CONFIG.value)
+  #   config.experiment.num_models = config.model.num_models
 
-  if config.model.get('bert_model', None):
-    config.update(_EXPERIMENT_CONFIG.value)
+  # if config.model.get('bert_model', None):
+  #   config.update(_EXPERIMENT_CONFIG.value)
 
   return config
 
 
 def main(_):
-  config = get_main_config()
+  config = get_main_config(FLAGS)
   update_save_dir(config)
   utils.setup_logging(config)
 
-  # t_min_list = [0.01,0.02,0.05,0.1,0.2,0.5,1.0,2.0]
-  # t_max_list = [0.1,0.2,0.5,1.0,2.0,5.0]
-  # pt_intervals = [200,500,1000]
-  # batch_sizes = [10,20,50]
-  t_min_list = [0.01,0.02,0.05,0.1,0.2,0.5,1.0,2.0]
-  # t_max_list = [2.0,5.0]
-  t_max_list = [0.1,0.2,0.5,1.0]
-  # pt_intervals = [200]
-  # pt_intervals = [500]
-  pt_intervals = [1000]
-  batch_sizes = [10]
-  # batch_sizes = [20]
-  # batch_sizes = [50]
-  for t_min in t_min_list:
-    for t_max in t_max_list:
-      for batch_size in batch_sizes:
-        for pt_interval in pt_intervals:
-          if t_min >= t_max:
-            continue
-          config.experiment.t_min = t_min
-          config.experiment.t_max = t_max
-          config.experiment.batch_size = batch_size
-          config.experiment.pt_interval = pt_interval
+  # model
+  model_mod = importlib.import_module('discs.models.%s' % config.model.name)
+  model = model_mod.build_model(config)
 
-          # model
-          model_mod = importlib.import_module('discs.models.%s' % config.model.name)
-          model = model_mod.build_model(config)
+  # sampler
+  sampler_mod = importlib.import_module(
+      'discs.samplers.%s' % config.sampler.name
+  )
+  sampler = sampler_mod.build_sampler(config)
 
-          # sampler
-          sampler_mod = importlib.import_module(
-              'discs.samplers.%s' % config.sampler.name
-          )
-          sampler = sampler_mod.build_sampler(config)
+  # experiment
+  experiment_mod = getattr(
+      importlib.import_module('discs.experiment.sampling'),
+      f'{config.experiment.name}',
+  )
+  experiment = experiment_mod(config)
 
-          # experiment
-          experiment_mod = getattr(
-              importlib.import_module('discs.experiment.sampling'),
-              f'{config.experiment.name}',
-          )
-          experiment = experiment_mod(config)
+  # evaluator
+  evaluator_mod = importlib.import_module(
+      'discs.evaluators.%s' % config.experiment.evaluator
+  )
+  evaluator = evaluator_mod.build_evaluator(config)
 
-          # evaluator
-          evaluator_mod = importlib.import_module(
-              'discs.evaluators.%s' % config.experiment.evaluator
-          )
-          evaluator = evaluator_mod.build_evaluator(config)
+  # saver
+  saver = saver_mod.build_saver(config)
+  
 
-          # saver
-          saver = saver_mod.build_saver(config)
-          
-
-          # chain generation
-          experiment.get_results(model, sampler, evaluator, saver)
+  # chain generation
+  experiment.get_results(model, sampler, evaluator, saver)
 
 
 if __name__ == '__main__':
