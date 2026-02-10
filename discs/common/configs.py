@@ -42,7 +42,6 @@ def get_config(FLAGS):
         co_opt_prob=False,
         window_size=10,
         window_stride=10,
-        
         batch_size=FLAGS.batch_size,
         t_schedule=FLAGS.t_schedule,
         chain_length=FLAGS.chain_length,

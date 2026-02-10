@@ -43,15 +43,6 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
       violation = jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) 
     elif self.formulation == 'max_linear_square':
       violation = jnp.square(jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) ) 
-    elif self.formulation == 'max_linear_cubic':
-      violation = jnp.power(jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax), 3) 
-    elif self.formulation == 'augmented_lagrangian':
-      violation = (jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax)) + jnp.square(jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax) ) 
-    elif self.formulation == 'indicator':
-      constraint_satisfied = (Ax <= ub) & (Ax >= lb)
-      violation = ~constraint_satisfied
-      # violation = (~constraint_satisfied).astype(jnp.float32)
-
     penalty = self.penalty_coeff * jnp.sum(violation, axis=0)
     return penalty
 
@@ -101,7 +92,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
     c = params['obj_coeffs']         # [N]
     ub = params['constraint_rhs']    # [M]
     lb = params['constraint_lhs']    # [M]
-    temp = params.get('temperature', 1.0)
+    temp = params['temperature']     # [1] or [batch] (pt)
 
     Ax = jnp.einsum('bn,nm->bm', x, A.T)  # current Ax [batch, M]
     obj_x = jnp.einsum('bn,n->b', x, c)  # current c^Tx [batch]
@@ -125,7 +116,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
     penalty_x_new = self.penalty_coeff * jnp.sum(jnp.square(v_new), axis=1)  # [batch, N]
 
     # Calculate Log-Ratios
-    ll_x_new = (obj_x[:, None] + delta_obj - penalty_x_new) / temp
+    ll_x_new = (obj_x[:, None] + delta_obj - penalty_x_new) / temp[:, None]
     logratio = ll_x_new - ll_x[:, None]
 
     return ll_x, logratio, 1, self.get_neighbor_fn
