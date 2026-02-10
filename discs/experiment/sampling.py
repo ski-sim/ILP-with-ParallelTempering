@@ -624,9 +624,11 @@ class CO_Experiment(Experiment):
         ratio = jnp.max(eval_val, axis=-1).reshape(-1) / self.ref_obj
         is_better = ratio > best_ratio
         best_ratio = jnp.maximum(ratio, best_ratio)
+        best_ratio = jnp.where(best_ratio < 0, -jnp.inf, best_ratio)
         sample_mask = sample_mask.reshape(best_ratio.shape)
         print(f'cur_temp: {cur_temp}, eval_val: {eval_val[0]}, obj: {obj_only_fn(params, new_x)[0]}, penalty: {penalty_val[0]}')
-        wandb.log({f'current_obj{self.sample_idx}': jnp.mean(eval_val),f'best_obj{self.sample_idx}': jnp.mean(best_ratio),f'penalty{self.sample_idx}':jnp.mean(penalty_val)})
+
+        wandb.log({f'instance{self.sample_idx}/mean_obj': jnp.mean(eval_val),f'instance{self.sample_idx}/best_obj': jnp.max(eval_val),f'instance{self.sample_idx}/bks_obj': jnp.mean(best_ratio),f'instance{self.sample_idx}/penalty':jnp.mean(penalty_val)})
         br = np.array(best_ratio[sample_mask])
         br = jax.device_put(br, jax.devices('cpu')[0])
         chain.append(br)
