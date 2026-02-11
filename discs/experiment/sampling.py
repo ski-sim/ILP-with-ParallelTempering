@@ -361,8 +361,8 @@ class CO_Experiment(Experiment):
       is_better = batch_best_val > best_eval_val
       best_eval_val = jnp.where(is_better, batch_best_val, best_eval_val)
       best_samples = jnp.where(is_better[..., None], batch_best_x, best_samples)
-      ratio = batch_best_val.reshape(-1) / self.ref_obj
-      best_ratio = jnp.maximum(ratio, best_ratio)
+      ratio = batch_best_val.reshape(-1) / self.ref_obj  # FIXME: Do we need this?
+      best_ratio = jnp.maximum(ratio, best_ratio)  # FIXME: Do we need this?
 
       if step % self.config.log_every_steps == 0:
         # eval_val = obj_fn(samples=new_x, params=params)
@@ -380,7 +380,11 @@ class CO_Experiment(Experiment):
           bks_obj = best_eval_val_log[_i].item()
 
           if _i == 0:
-            print(f'instance{_j}, cur_temp: {cur_temp}, bks_obj: {bks_obj}, best_obj: {best_obj}, mean_obj: {mean_obj}, mean_penalty: {mean_penalty}')
+            if len(cur_temp.shape) > 1:  # FIXME: why does cur_temp have length 2?
+              print(f'instance{_j}, temp_min: {cur_temp[0, 0]}, temp_max: {cur_temp[0, -1]}', end=' ')
+            else:
+              print(f'instance{_j}, temp: {cur_temp}', end=' ')
+            print(f'bks_obj: {bks_obj}, best_obj: {best_obj}, mean_obj: {mean_obj}, mean_penalty: {mean_penalty}')
 
           wandb.log(
             {
