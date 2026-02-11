@@ -350,7 +350,7 @@ class CO_Experiment(Experiment):
       new_ll = state['log_prob'] * params['temperature']
 
       # parallel tempering
-      if self.config.t_schedule == 'pt' and self.config.pt in ['deo', 'seo'] and step % self.config.pt_interval == 0:
+      if 'pt' in self.config.t_schedule and self.config.pt in ['deo', 'seo'] and step % self.config.pt_interval == 0:
         new_x, is_accept = pt_fn(new_x, new_ll, params['temperature'], rng, step)
       running_time += time.time() - start
 
