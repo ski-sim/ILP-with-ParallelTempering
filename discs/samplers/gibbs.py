@@ -5,7 +5,6 @@ from discs.samplers import abstractsampler
 import jax
 import jax.numpy as jnp
 import ml_collections
-import pdb
 
 
 class GibbsSampler(abstractsampler.AbstractSampler):

@@ -32,10 +32,10 @@ class DMALASampler(locallybalanced.LocallyBalancedSampler):
     state['log_z'] = log_z
 
   def select_sample(
-      self, rng, local_stats, log_acc, current_sample, new_sample, sampler_state
+      self, rng, local_stats, log_acc, current_sample, new_sample, curr_ll, new_ll, sampler_state
   ):
     y, new_state = super().select_sample(
-        rng, log_acc, current_sample, new_sample, sampler_state
+        rng, log_acc, current_sample, new_sample, curr_ll, new_ll, sampler_state
     )
     acc = jnp.mean(jnp.exp(jnp.clip(log_acc, a_max=0.0)))
     self.update_sampler_state(new_state, acc, local_stats)
@@ -111,7 +111,7 @@ class DMALASampler(locallybalanced.LocallyBalancedSampler):
     ll_y2x = self.get_ll_onestep(dist_y, aux=aux)
     log_acc = ll_y + ll_y2x - ll_x - ll_x2y
     new_x, new_state = self.select_sample(
-        rng_acceptance, local_stats, log_acc, x, y, state
+        rng_acceptance, local_stats, log_acc, x, y, ll_x, ll_y, state
     )
     acc = jnp.mean(jnp.clip(jnp.exp(log_acc), a_max=1))
     return new_x, new_state, acc

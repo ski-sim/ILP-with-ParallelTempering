@@ -26,16 +26,31 @@ class LBPforILP(locallybalanced.LocallyBalancedSampler):
 
     log_acc = ll_y + ll_y2x - ll_x - ll_x2y
     new_x, new_state = self.select_sample(
-        rng_acceptance, num_calls_forward + num_calls_backward,
-        log_acc, x, y, state)
+      rng_acceptance,
+      num_calls_forward + num_calls_backward,
+      log_acc,
+      x,
+      y,
+      ll_x,
+      ll_y,
+      state
+    )
 
     acc = jnp.mean(jnp.clip(jnp.exp(log_acc), a_max=1))
     return new_x, new_state, acc
 
-  def select_sample(self, rng, num_calls, log_acc,
-                    current_sample, new_sample, sampler_state):
+  def select_sample(
+    self, rng, num_calls, log_acc, current_sample, new_sample, current_ll, new_ll, sampler_state
+  ):
     y, new_state = super().select_sample(
-        rng, log_acc, current_sample, new_sample, sampler_state)
+      rng,
+      log_acc,
+      current_sample,
+      new_sample,
+      current_ll,
+      new_ll,
+      sampler_state
+    )
     new_state['num_ll_calls'] += num_calls
     return y, new_state
 

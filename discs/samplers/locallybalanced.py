@@ -26,14 +26,16 @@ class LocallyBalancedSampler(abstractsampler.AbstractSampler):
     self.balancing_fn_type = config.sampler.balancing_fn_type
 
   def select_sample(
-      self, rng, log_acc, current_sample, new_sample, sampler_state):
+      self, rng, log_acc, current_sample, new_sample, current_ll, new_ll, sampler_state):
     y, acc = math.mh_step(rng, log_acc, current_sample, new_sample)
+    ll_y = jnp.where(acc, new_ll, current_ll)
     if self.num_categories == 2:
       y = y.astype(jnp.int32)
     else:
       y = jnp.argmax(y, axis=-1)
     sampler_state = utils.copy_pytree(sampler_state)
     super().update_sampler_state(sampler_state)
+    sampler_state["log_prob"] = ll_y
     return y, sampler_state
 
   def apply_weight_function(self, t):

@@ -12,13 +12,13 @@ class GibbsWithGradSampler(locallybalanced.LocallyBalancedSampler):
   """Gibbs With Grad Sampler Class."""
 
   def select_sample(
-      self, rng, log_acc, current_sample, new_sample, sampler_state
+      self, rng, log_acc, current_sample, new_sample, current_ll, new_ll, sampler_state
   ):
-    y, sampler_state = super().select_sample(
-        rng, log_acc, current_sample, new_sample, sampler_state
+    y, new_state = super().select_sample(
+        rng, log_acc, current_sample, new_sample, current_ll, new_ll, sampler_state
     )
     sampler_state['num_ll_calls'] += 4
-    return y, sampler_state
+    return y, new_state
 
   def step(self, model, rng, x, model_param, state, x_mask=None):
     if self.num_categories != 2:
@@ -33,7 +33,7 @@ class GibbsWithGradSampler(locallybalanced.LocallyBalancedSampler):
     dist_y = self.get_dist_at(y, grad_y, x_mask)
     ll_y2x = self.get_ll_onestep(dist_y, aux=aux, src_to_dst='y2x')
     log_acc = ll_y + ll_y2x - ll_x - ll_x2y
-    new_x, new_state = self.select_sample(rng_acceptance, log_acc, x, y, state)
+    new_x, new_state = self.select_sample(rng_acceptance, log_acc, x, y, ll_x, ll_y, state)
 
     acc = jnp.mean(jnp.clip(jnp.exp(log_acc), a_max=1))
     return new_x, new_state, acc
@@ -90,10 +90,10 @@ class AdaptiveGWGSampler(BinaryGWGSampler):
     return state
 
   def select_sample(
-      self, rng, log_acc, current_sample, new_sample, sampler_state
+      self, rng, log_acc, current_sample, new_sample, current_ll, new_ll, sampler_state
   ):
     y, new_state = super().select_sample(
-        rng, log_acc, current_sample, new_sample, sampler_state
+        rng, log_acc, current_sample, new_sample, current_ll, new_ll, sampler_state
     )
     acc = jnp.mean(jnp.exp(jnp.clip(log_acc, a_max=0.0)))
     r = sampler_state['radius'] + acc - self.target_acceptance_rate
@@ -126,10 +126,10 @@ class CategoricalGWGSampler(GibbsWithGradSampler):
   """GWG for categorical data."""
 
   def select_sample(
-      self, rng, log_acc, current_sample, new_sample, sampler_state
+      self, rng, log_acc, current_sample, new_sample, current_ll, new_ll, sampler_state
   ):
     y, new_state = super().select_sample(
-        rng, log_acc, current_sample, new_sample, sampler_state
+        rng, log_acc, current_sample, new_sample, current_ll, new_ll, sampler_state
     )
     return y, new_state
 

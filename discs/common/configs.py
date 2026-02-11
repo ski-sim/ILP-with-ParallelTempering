@@ -29,7 +29,7 @@ def get_config(FLAGS):
       experiment=dict(
         name='CO_Experiment',
         evaluator='co_eval',
-        num_models=1,
+        num_models=FLAGS.num_models,
         ess_ratio=0.5,
         run_parallel=True,
         get_additional_metrics=False,
