@@ -261,6 +261,15 @@ class CO_Experiment(Experiment):
       )
     elif config.t_schedule == 'pt':
       schedule = lambda step: step * 0 + jnp.geomspace(self.config.t_min, self.config.t_max, num=self.config.batch_size)[None, :]
+    elif config.t_schedule == 'pt_exp_decay':
+      pt_base = jnp.geomspace(self.config.t_min, self.config.t_max, num=self.config.batch_size)[None, :]
+      decay_schedule = optax.exponential_decay(
+          1.0,
+          config.chain_length,
+          config.decay_rate,
+          end_value=0.0,
+      )
+      schedule = lambda step: pt_base * decay_schedule(step)
     else:
       raise ValueError('Unknown schedule %s' % config.t_schedule)
     return schedule
@@ -364,20 +373,21 @@ class CO_Experiment(Experiment):
         best_penalty_val = penalty_fn(params, best_samples[:, None, :]).squeeze(-1)
         best_eval_val_log = jnp.where(best_penalty_val > 0, -jnp.inf, best_eval_val)
 
-        for _idx in self.sample_idx:
-          mean_obj = jnp.mean(eval_val_log[_idx], axis=-1).item()
-          best_obj = jnp.max(eval_val_log[_idx], axis=-1).item()
-          mean_penalty = jnp.mean(penalty_val[_idx], axis=-1).item()
-          bks_obj = best_eval_val_log[_idx].item()
-          if _idx == 0:
-            print(f'cur_temp: {cur_temp}, bks_obj: {bks_obj}, best_obj: {best_obj}, mean_obj: {mean_obj}, mean_penalty: {mean_penalty}')
+        for _i, _j in enumerate(self.sample_idx):
+          mean_obj = jnp.mean(eval_val_log[_i], axis=-1).item()
+          best_obj = jnp.max(eval_val_log[_i], axis=-1).item()
+          mean_penalty = jnp.mean(penalty_val[_i], axis=-1).item()
+          bks_obj = best_eval_val_log[_i].item()
+
+          if _i == 0:
+            print(f'instance{_j}, cur_temp: {cur_temp}, bks_obj: {bks_obj}, best_obj: {best_obj}, mean_obj: {mean_obj}, mean_penalty: {mean_penalty}')
 
           wandb.log(
             {
-              f'instance{_idx}/bks_obj': bks_obj,
-              f'instance{_idx}/best_obj': best_obj,
-              f'instance{_idx}/mean_obj': mean_obj,
-              f'instance{_idx}/mean_penalty':mean_penalty
+              f'instance{_j}/bks_obj': bks_obj,
+              f'instance{_j}/best_obj': best_obj,
+              f'instance{_j}/mean_obj': mean_obj,
+              f'instance{_j}/mean_penalty':mean_penalty
             }
           )
 
