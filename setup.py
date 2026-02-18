@@ -26,5 +26,6 @@ setup(
         'nltk',
         'pyscipopt',
         'wandb',
+        'jax[cuda12]<0.5',
     ],
 )
