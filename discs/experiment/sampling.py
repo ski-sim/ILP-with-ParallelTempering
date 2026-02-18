@@ -1,4 +1,5 @@
 """Main class that runs sampler on the model to generate chains."""
+
 import functools
 import time
 from discs.common import math_util as math
@@ -11,6 +12,7 @@ import optax
 import tqdm
 from discs.common.parallel_tempering import swap_samples_deo, swap_samples_seo
 import wandb
+
 
 class Experiment:
     """Experiment class that generates chains of samples."""
@@ -387,12 +389,12 @@ class CO_Experiment(Experiment):
                         )
 
                     wandb.log(
-                      {
-                        f'instance{_j}/bks_obj': bks_obj,
-                        f'instance{_j}/best_obj': best_obj,
-                        f'instance{_j}/mean_obj': mean_obj,
-                        f'instance{_j}/mean_penalty':mean_penalty
-                      }
+                        {
+                            f"instance{_j}/bks_obj": bks_obj,
+                            f"instance{_j}/best_obj": best_obj,
+                            f"instance{_j}/mean_obj": mean_obj,
+                            f"instance{_j}/mean_penalty": mean_penalty,
+                        }
                     )
 
                 sample_mask = sample_mask.reshape(best_ratio.shape)

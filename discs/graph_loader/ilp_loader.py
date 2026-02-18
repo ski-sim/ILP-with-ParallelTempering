@@ -169,17 +169,7 @@ class ILPGraphGen:
                     }
                 except Exception as e:
                     print(f"Warning: Could not process MILP model {idx}: {e}")
-                    var_types = np.zeros(self._max_num_nodes, dtype=np.int32)
-                    params = {
-                        "mask": jnp.ones(self._max_num_nodes),
-                        "temperature": 1.0,
-                        # 'model': g,
-                        "obj_coeffs": jnp.ones(self._max_num_nodes),
-                        "constraint_matrix": jnp.zeros((0, self._max_num_nodes)),
-                        "constraint_rhs": jnp.zeros(0),
-                        "constraint_lhs": jnp.zeros(0),
-                        "var_types": jnp.array(var_types),
-                    }
+                    raise e
                 buffer.append((idx, params, sol))  # (index, params, solution) 형태로 반환
                 if len(buffer) == local_batch_size:
                     num_batches += 1

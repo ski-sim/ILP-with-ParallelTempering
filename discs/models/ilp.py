@@ -104,10 +104,8 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         obj_x = jnp.einsum("bn,n->b", x, c)  # current c^Tx [batch]
         if self.config.graph_type == "sc":
             obj_x = -obj_x
-        v_curr = jnp.maximum(0, Ax - ub[None, :]) + jnp.maximum(0, lb[None, :] - Ax)  # [batch, M]
-        penalty_x = self.penalty_coeff * jnp.sum(
-            jnp.square(v_curr), axis=-1
-        )  # current penalty [batch]
+        v_curr = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))  # [batch, M]
+        penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=-1)  # [batch]
         ll_x = (obj_x - penalty_x) / temp  # current -energy [batch]
 
         # Deltas for flipping each bit j
@@ -120,9 +118,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
 
         # Change in Penalty
         Ax_new = Ax[:, :, None] + A[None, :, :] * delta_x[:, None, :]  # [batch, M, N]
-        v_new = jnp.maximum(0, Ax_new - ub[None, :, None]) + jnp.maximum(
-            0, lb[None, :, None] - Ax_new
-        )
+        v_new = jnp.maximum(0, jnp.maximum(Ax_new - ub[None, :, None], lb[None, :, None] - Ax_new))
         penalty_x_new = self.penalty_coeff * jnp.sum(jnp.square(v_new), axis=1)  # [batch, N]
 
         # Calculate Log-Ratios
