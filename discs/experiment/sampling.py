@@ -335,6 +335,8 @@ class CO_Experiment(Experiment):
                 )
                 break
 
+            start = time.time()
+
             if self.config.reweight == "reheat":
                 cur_temp = t_schedule(fake_step)
                 params["temperature"] = jnp.array(cur_temp).reshape(params["temperature"].shape)
@@ -345,7 +347,6 @@ class CO_Experiment(Experiment):
             rng = jax.random.fold_in(rng, step)
             step_rng = fn_reshape(jax.random.split(rng, math.prod(bshape)))
 
-            start = time.time()
             if self.config.reweight == "mask":
                 params["mask"] = mask_fn(x, params)
 
@@ -372,10 +373,6 @@ class CO_Experiment(Experiment):
                 pairs = [f"{a}-{b}" for a, b in zip(indices_a[0], indices_b[0])]
                 pt_step += 1
 
-            step_time = time.time() - start
-            running_time += step_time  # FIXME: Do we need this?
-            elapsed_time += step_time
-
             eval_val = new_ll
             best_idx = jnp.argmax(eval_val, axis=-1, keepdims=True)
             batch_best_val = jnp.take_along_axis(eval_val, best_idx, axis=-1).squeeze(-1)
@@ -386,8 +383,16 @@ class CO_Experiment(Experiment):
             ratio = batch_best_val.reshape(-1) / self.ref_obj  # FIXME: Do we need this?
             best_ratio = jnp.maximum(ratio, best_ratio)  # FIXME: Do we need this?
 
+            new_x.block_until_ready()  # wait for new_x to be ready before calculating the time
+            step_time = time.time() - start
+            running_time += step_time  # FIXME: Do we need this?
+            elapsed_time += step_time
+
             if self.config_model.mode == "test":
-                log_cond = elapsed_time // self.config.log_every_steps >= num_log
+                log_cond = (
+                    elapsed_time / (self.config_model.max_runtime / self.config.log_every_steps)
+                    >= num_log
+                )
             else:  # self.config.mode == "val"
                 log_cond = step % self.config.log_every_steps == 0
 

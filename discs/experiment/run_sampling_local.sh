@@ -27,7 +27,7 @@ python -m discs.experiment.main_sampling \
    --penalty_weight=${penalty_weight} --formulation=max_linear --proposal_type=obj --reweight=None \
    --num_instances=20 --num_models=1 --batch_size=15 --chain_length=100000 \
    --t_schedule=pt_exp_decay --init_temperature=1.0 --decay_rate=0.1 \
-   --pt=deo --pt_interval=100 --t_min=1 --t_max=2
+   --pt=deo --pt_interval=100 --t_min=1 --t_max=2 --mode=test
 #    wait
 # done
 # wait
