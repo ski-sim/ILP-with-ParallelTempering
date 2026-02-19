@@ -1,7 +1,7 @@
 sampler=lbp
-graph_type=mis
-max_num_nodes=3000
-max_num_constraints=13000
+graph_type=sc
+max_num_nodes=4000
+max_num_constraints=5000
 penalty_weight=10
 export CUDA_VISIBLE_DEVICES=0
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.96

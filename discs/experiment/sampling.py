@@ -296,7 +296,9 @@ class CO_Experiment(Experiment):
         )
         fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
 
-        wandb.init()
+        wandb.init(
+            name=f"{self.config_model.graph_type}_{self.config_model.max_num_nodes}_{self.config_model.name}_{self.config.t_schedule}_{self.config.init_temperature}_{self.config.decay_rate}_{self.config.pt}_{self.config.pt_interval}_{self.config.t_min}_{self.config.t_max}_{self.config.batch_size}"
+        )
 
         # reheated mechanism
         best_eval_val = jnp.ones(self.config.num_models) * -jnp.inf
@@ -318,7 +320,21 @@ class CO_Experiment(Experiment):
             init_temperature = jnp.ones(temp_shape, dtype=jnp.float32)
             params["temperature"] = t_schedule(0) * init_temperature  # (100,32)
 
-        for step in tqdm.tqdm(range(1, self.config.chain_length + 1), dynamic_ncols=True):
+        pt_step = 0
+        num_log = 0
+        mean_accept = 0
+        pairs = []
+        elapsed_time = 0
+        for step in tqdm.tqdm(range(1, self.config.chain_length * 2 + 1), dynamic_ncols=True):
+            if (
+                elapsed_time > self.config_model.max_runtime
+                and num_log > self.config_model.max_runtime // self.config.log_every_steps
+            ):
+                print(
+                    f"time limit {self.config_model.max_runtime}s reached, early stopping burn-in (step: {step})"
+                )
+                break
+
             if self.config.reweight == "reheat":
                 cur_temp = t_schedule(fake_step)
                 params["temperature"] = jnp.array(cur_temp).reshape(params["temperature"].shape)
@@ -348,8 +364,17 @@ class CO_Experiment(Experiment):
                 and self.config.pt in ["deo", "seo"]
                 and step % self.config.pt_interval == 0
             ):
-                new_x, is_accept = pt_fn(new_x, new_ll, params["temperature"], rng, step)
-            running_time += time.time() - start
+                new_x, acceptance_ratio, indices_a, indices_b = pt_fn(
+                    new_x, new_ll, params["temperature"], rng, step
+                )
+                mean_accept = jnp.mean(acceptance_ratio)
+                # FIXME: remove [0] later
+                pairs = [f"{a}-{b}" for a, b in zip(indices_a[0], indices_b[0])]
+                pt_step += 1
+
+            step_time = time.time() - start
+            running_time += step_time  # FIXME: Do we need this?
+            elapsed_time += step_time
 
             eval_val = new_ll
             best_idx = jnp.argmax(eval_val, axis=-1, keepdims=True)
@@ -361,7 +386,13 @@ class CO_Experiment(Experiment):
             ratio = batch_best_val.reshape(-1) / self.ref_obj  # FIXME: Do we need this?
             best_ratio = jnp.maximum(ratio, best_ratio)  # FIXME: Do we need this?
 
-            if step % self.config.log_every_steps == 0:
+            if self.config_model.mode == "test":
+                log_cond = elapsed_time // self.config.log_every_steps >= num_log
+            else:  # self.config.mode == "val"
+                log_cond = step % self.config.log_every_steps == 0
+
+            if log_cond:
+                num_log += 1
                 # eval_val = obj_fn(samples=new_x, params=params)
                 # eval_val = eval_val.reshape(self.config.num_models, -1)
                 penalty_val = penalty_fn(params, new_x)
@@ -394,6 +425,11 @@ class CO_Experiment(Experiment):
                             f"instance{_j}/best_obj": best_obj,
                             f"instance{_j}/mean_obj": mean_obj,
                             f"instance{_j}/mean_penalty": mean_penalty,
+                            f"instance{_j}/mean_accept": mean_accept,
+                            **{
+                                f"instance{_j}/swap_accept_{pairs[k]}": acceptance_ratio[0][k]
+                                for k in range(len(pairs))
+                            },
                         }
                     )
 

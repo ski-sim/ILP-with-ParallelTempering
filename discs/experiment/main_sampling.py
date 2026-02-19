@@ -45,6 +45,8 @@ flags.DEFINE_float("final_temperature", 0.0, "final_temperature")
 flags.DEFINE_float("t_min", 0.1, "t_min")
 flags.DEFINE_float("t_max", 5.0, "t_max")
 flags.DEFINE_string("reweight", "None", "reweight")
+flags.DEFINE_string("mode", "val", "mode")
+flags.DEFINE_float("max_runtime", 200.0, "max_runtime")
 
 
 def update_save_dir(config):
