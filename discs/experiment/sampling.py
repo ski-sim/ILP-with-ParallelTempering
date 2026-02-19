@@ -393,7 +393,7 @@ class CO_Experiment(Experiment):
                     elapsed_time / (self.config_model.max_runtime / self.config.log_every_steps)
                     >= num_log
                 )
-            else:  # self.config.mode == "val"
+            else:  # self.config_model.mode == "val"
                 log_cond = step % self.config.log_every_steps == 0
 
             if log_cond:
