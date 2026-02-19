@@ -92,131 +92,67 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         elif self.config.graph_type == "mis":
             return jnp.dot(x, params["obj_coeffs"])
 
-    def logratio_in_neighborhood(self, params, x):
-        # x shape: [batch, N]
+    def logratio_in_neighborhood(self, params, x, m_chunk_size=1000):
         A = params["constraint_matrix"]  # [M, N]
         c = params["obj_coeffs"]  # [N]
         ub = params["constraint_rhs"]  # [M]
         lb = params["constraint_lhs"]  # [M]
-        temp = params["temperature"]  # [1] or [batch] (pt)
+        temp = params["temperature"]  # [batch] or [1]
 
-        Ax = jnp.einsum("bn,nm->bm", x, A.T)  # current Ax [batch, M]
-        obj_x = jnp.einsum("bn,n->b", x, c)  # current c^Tx [batch]
+        batch_size, N = x.shape
+        M = A.shape[0]
+        m_chunk = min(m_chunk_size, M)
+
+        Ax = x @ A.T  # [batch, M]
+        obj_x = x @ c  # [batch]
         if self.config.graph_type == "sc":
             obj_x = -obj_x
+
         v_curr = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))  # [batch, M]
         penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=-1)  # [batch]
-        ll_x = (obj_x - penalty_x) / temp  # current -energy [batch]
+        ll_x = (obj_x - penalty_x) / temp  # [batch]
 
-        # Deltas for flipping each bit j
         delta_x = 1 - 2 * x  # [batch, N]
-
-        # Change in objective: c_j * delta_x_j
         delta_obj = c[None, :] * delta_x  # [batch, N]
         if self.config.graph_type == "sc":
             delta_obj = -delta_obj
 
-        # Change in Penalty
-        Ax_new = Ax[:, :, None] + A[None, :, :] * delta_x[:, None, :]  # [batch, M, N]
-        v_new = jnp.maximum(0, jnp.maximum(Ax_new - ub[None, :, None], lb[None, :, None] - Ax_new))
-        penalty_x_new = self.penalty_coeff * jnp.sum(jnp.square(v_new), axis=1)  # [batch, N]
+        # Scan over M (constraints)
+        excess_upper = Ax - ub[None, :]  # [batch, M]
+        excess_lower = lb[None, :] - Ax  # [batch, M]
 
-        # Calculate Log-Ratios
-        ll_x_new = (obj_x[:, None] + delta_obj - penalty_x_new) / temp[:, None]
-        logratio = ll_x_new - ll_x[:, None]
+        pad_m = (-M) % m_chunk
+        if pad_m > 0:
+            A_padded = jnp.pad(A, ((0, pad_m), (0, 0)))
+            excess_upper = jnp.pad(excess_upper, ((0, 0), (0, pad_m)), constant_values=-jnp.inf)
+            excess_lower = jnp.pad(excess_lower, ((0, 0), (0, pad_m)), constant_values=-jnp.inf)
+        else:
+            A_padded = A
 
-        return ll_x, logratio, 1, self.get_neighbor_fn
+        num_m_chunks = (M + pad_m) // m_chunk
+        A_scan = A_padded.reshape(num_m_chunks, m_chunk, N)  # [num_m_chunks, m_chunk, N]
+        eu_scan = excess_upper.reshape(batch_size, num_m_chunks, m_chunk).transpose(1, 0, 2)
+        el_scan = excess_lower.reshape(batch_size, num_m_chunks, m_chunk).transpose(1, 0, 2)
+        # [num_m_chunks, batch, m_chunk] each
 
-    # def logratio_in_neighborhood(self, params, x, chunk_size=1000):
-    #     # A: [M, N], x: [batch, N]
-    #     A = params["constraint_matrix"]
-    #     c = params["obj_coeffs"]
-    #     ub = params["constraint_rhs"]
-    #     lb = params["constraint_lhs"]
-    #     temp = params["temperature"]
+        def scan_body(penalty_acc, inputs):
+            A_chunk, eu_chunk, el_chunk = inputs
+            # A_chunk: [m_chunk, N], eu/el_chunk: [batch, m_chunk]
+            shift = A_chunk[None, :, :] * delta_x[:, None, :]  # [batch, m_chunk, N]
+            v_new = jnp.maximum(0, eu_chunk[:, :, None] + shift) + jnp.maximum(
+                0, el_chunk[:, :, None] - shift
+            )
+            return penalty_acc + jnp.sum(jnp.square(v_new), axis=1), None
 
-    #     batch_size, N = x.shape
-    #     M = A.shape[0]
+        penalty_new, _ = jax.lax.scan(
+            scan_body, jnp.zeros((batch_size, N)), (A_scan, eu_scan, el_scan)
+        )
+        penalty_new = self.penalty_coeff * penalty_new
 
-    #     # 1. Precompute current state (Same as before)
-    #     Ax = jnp.einsum("bn,nm->bm", x, A.T)  # [batch, M]
-    #     obj_x = jnp.einsum("bn,n->b", x, c)
-    #     if self.config.graph_type == "sc":
-    #         obj_x = -obj_x
+        ll_new = (obj_x[:, None] + delta_obj - penalty_new) / temp[:, None]
+        logratios = ll_new - ll_x[:, None]
 
-    #     v_curr = jnp.maximum(0, Ax - ub) + jnp.maximum(0, lb - Ax)
-    #     penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=-1)
-    #     ll_x = (obj_x - penalty_x) / temp
-
-    #     # 2. Prepare Data for Chunking
-    #     # We pad N to be divisible by chunk_size to ensure static shapes for JIT
-    #     remainder = N % chunk_size
-    #     pad_len = (chunk_size - remainder) % chunk_size
-
-    #     # Calculate all deltas at once [batch, N]
-    #     delta_x_all = 1 - 2 * x
-    #     delta_obj_all = c[None, :] * delta_x_all
-    #     if self.config.graph_type == "sc":
-    #         delta_obj_all = -delta_obj_all
-
-    #     # Pad the arrays
-    #     delta_x_padded = jnp.pad(delta_x_all, ((0, 0), (0, pad_len)))
-    #     delta_obj_padded = jnp.pad(delta_obj_all, ((0, 0), (0, pad_len)))
-
-    #     # Reshape to [num_chunks, batch, chunk_size] for scanning
-    #     num_chunks = delta_x_padded.shape[1] // chunk_size
-
-    #     delta_x_reshaped = delta_x_padded.reshape(batch_size, num_chunks, chunk_size).transpose(
-    #         1, 0, 2
-    #     )
-    #     delta_obj_reshaped = delta_obj_padded.reshape(batch_size, num_chunks, chunk_size).transpose(
-    #         1, 0, 2
-    #     )
-
-    #     # We also need to chunk A accordingly [M, N] -> [num_chunks, M, chunk_size]
-    #     A_padded = jnp.pad(A, ((0, 0), (0, pad_len)))
-    #     A_reshaped = A_padded.reshape(M, num_chunks, chunk_size).transpose(1, 0, 2)
-
-    #     # 3. The Scan Function (Processes a block of 'chunk_size' neighbors)
-    #     def scan_body(carry, inputs):
-    #         # inputs: contains slices for this chunk
-    #         dx_chunk, dobj_chunk, A_chunk = inputs
-    #         # dx_chunk: [batch, chunk_size]
-    #         # A_chunk:  [M, chunk_size]
-
-    #         # Compute change in Ax for this chunk
-    #         # [batch, 1, chunk] * [1, M, chunk] -> [batch, M, chunk]
-    #         # (This is the memory-critical step. We strictly limit the 3rd dim to chunk_size)
-    #         Ax_change = dx_chunk[:, None, :] * A_chunk[None, :, :]
-
-    #         # Ax is [batch, M]. We need to broadcast it against the chunk dim
-    #         Ax_new = Ax[:, :, None] + Ax_change
-
-    #         # Re-compute penalty
-    #         v_new = jnp.maximum(0, Ax_new - ub[:, None]) + jnp.maximum(0, lb[:, None] - Ax_new)
-    #         penalty_chunk = self.penalty_coeff * jnp.sum(
-    #             jnp.square(v_new), axis=1
-    #         )  # Sum over M -> [batch, chunk]
-
-    #         # Calculate Log Ratios
-    #         ll_new = (obj_x[:, None] + dobj_chunk - penalty_chunk) / temp[:, None]
-    #         logratio_chunk = ll_new - ll_x[:, None]
-
-    #         return carry, logratio_chunk
-
-    #     # 4. Run Scan
-    #     _, logratios_padded = jax.lax.scan(
-    #         scan_body, None, (delta_x_reshaped, delta_obj_reshaped, A_reshaped)
-    #     )
-
-    #     # logratios_padded is [num_chunks, batch, chunk_size]
-    #     # Reshape back to [batch, N_padded]
-    #     logratios = logratios_padded.transpose(1, 0, 2).reshape(batch_size, -1)
-
-    #     # Remove padding
-    #     logratios = logratios[:, :N]
-
-    #     return ll_x, logratios, 1, self.get_neighbor_fn
+        return ll_x, logratios, 1, self.get_neighbor_fn
 
 
 def build_model(config):
