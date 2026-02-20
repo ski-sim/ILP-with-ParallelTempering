@@ -1,8 +1,11 @@
 sampler=lbp
 graph_type=mis
 max_num_nodes=3000
-max_num_constraints=12000
+max_num_constraints=13000
 penalty_weight=10
+init_temperature=1.0
+t_min=0.5
+t_max=1.0
 
 export CUDA_VISIBLE_DEVICES=0
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.96
@@ -26,5 +29,5 @@ python -m discs.experiment.main_sampling \
    --graph_type=${graph_type} --max_num_nodes=${max_num_nodes} --max_num_constraints=${max_num_constraints} \
    --penalty_weight=${penalty_weight} --formulation=max_linear --proposal_type=obj --reweight=None \
    --num_instances=20 --num_models=1 --batch_size=15 --chain_length=100000 \
-   --t_schedule=pt_exp_decay --init_temperature=1.0 --decay_rate=0.1 \
-   --pt=deo --pt_interval=100 --t_min=1 --t_max=2 --log_every_steps=100 --mode=val
+   --t_schedule=pt_exp_decay --init_temperature=${init_temperature} --decay_rate=0.1 \
+   --pt=deo --pt_interval=100 --t_min=${t_min} --t_max=${t_max} --log_every_steps=100 --mode=test

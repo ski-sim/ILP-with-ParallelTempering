@@ -324,17 +324,9 @@ class CO_Experiment(Experiment):
         num_log = 0
         mean_accept = 0
         pairs = []
+        acceptance_ratio = jnp.ones((self.config.num_models, self.config.batch_size)) * -jnp.nan
         elapsed_time = 0
         for step in tqdm.tqdm(range(1, self.config.chain_length * 2 + 1), dynamic_ncols=True):
-            if (
-                elapsed_time > self.config_model.max_runtime
-                and num_log > self.config_model.max_runtime // self.config.log_every_steps
-            ):
-                print(
-                    f"time limit {self.config_model.max_runtime}s reached, early stopping burn-in (step: {step})"
-                )
-                break
-
             start = time.time()
 
             if self.config.reweight == "reheat":
@@ -396,7 +388,13 @@ class CO_Experiment(Experiment):
             else:  # self.config_model.mode == "val"
                 log_cond = step % self.config.log_every_steps == 0
 
-            if log_cond:
+            terminate_cond = (
+                self.config_model.mode == "test"
+                and elapsed_time > self.config_model.max_runtime
+                and num_log > self.config_model.max_runtime // self.config.log_every_steps
+            )
+
+            if log_cond or terminate_cond:
                 num_log += 1
                 # eval_val = obj_fn(samples=new_x, params=params)
                 # eval_val = eval_val.reshape(self.config.num_models, -1)
@@ -423,6 +421,10 @@ class CO_Experiment(Experiment):
                         print(
                             f"bks_obj: {bks_obj}, best_obj: {best_obj}, mean_obj: {mean_obj}, mean_penalty: {mean_penalty}"
                         )
+                        if "pt" in self.config.t_schedule:
+                            print(
+                                f"pt_step: {pt_step}, mean_accept: {mean_accept}, first_pair_accept: {acceptance_ratio[0][0]}, last_pair_accept: {acceptance_ratio[0][-1]}"
+                            )
 
                     wandb.log(
                         {
@@ -437,6 +439,12 @@ class CO_Experiment(Experiment):
                             },
                         }
                     )
+
+                if terminate_cond:
+                    print(
+                        f"time limit {self.config_model.max_runtime}s reached, early stopping burn-in (step: {step})"
+                    )
+                    break
 
                 sample_mask = sample_mask.reshape(best_ratio.shape)
                 br = np.array(best_ratio[sample_mask])
