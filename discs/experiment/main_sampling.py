@@ -28,7 +28,6 @@ flags.DEFINE_integer("num_instances", 20, "num_instances")
 flags.DEFINE_integer("num_categories", 2, "num_categories")
 flags.DEFINE_string("rand_type", "r-800", "rand_type")
 flags.DEFINE_string("formulation", "max_linear_square", "formulation")
-flags.DEFINE_string("proposal_type", "obj", "proposal_type")
 
 # Experiment flags
 flags.DEFINE_integer("batch_size", 32, "batch_size")

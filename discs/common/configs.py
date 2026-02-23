@@ -21,7 +21,6 @@ def get_config(FLAGS):
             shape=(0,),
             rand_type=FLAGS.rand_type,
             formulation=FLAGS.formulation,  # indicator
-            proposal_type=FLAGS.proposal_type,  # grad, ll
             mode=FLAGS.mode,
             max_runtime=FLAGS.max_runtime,
         ),

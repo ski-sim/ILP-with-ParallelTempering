@@ -350,6 +350,7 @@ class CO_Experiment(Experiment):
                 x_mask=params["mask"],
             )
             new_ll = state["log_prob"] * params["temperature"]
+            is_valid = state["is_valid"]
 
             # parallel tempering
             if (
@@ -365,7 +366,7 @@ class CO_Experiment(Experiment):
                 pairs = [f"{a}-{b}" for a, b in zip(indices_a[0], indices_b[0])]
                 pt_step += 1
 
-            eval_val = new_ll
+            eval_val = jnp.where(is_valid, new_ll, -jnp.inf)
             best_idx = jnp.argmax(eval_val, axis=-1, keepdims=True)
             batch_best_val = jnp.take_along_axis(eval_val, best_idx, axis=-1).squeeze(-1)
             batch_best_x = jnp.take_along_axis(new_x, best_idx[..., None], axis=-2).squeeze(-2)
@@ -396,39 +397,37 @@ class CO_Experiment(Experiment):
 
             if log_cond or terminate_cond:
                 num_log += 1
-                # eval_val = obj_fn(samples=new_x, params=params)
-                # eval_val = eval_val.reshape(self.config.num_models, -1)
                 penalty_val = penalty_fn(params, new_x)
-                eval_val_log = jnp.where(penalty_val > 0, -jnp.inf, eval_val)
-
-                best_penalty_val = penalty_fn(params, best_samples[:, None, :]).squeeze(-1)
-                best_eval_val_log = jnp.where(best_penalty_val > 0, -jnp.inf, best_eval_val)
 
                 for _i, _j in enumerate(self.sample_idx):
-                    mean_obj = jnp.mean(eval_val_log[_i], axis=-1).item()
-                    best_obj = jnp.max(eval_val_log[_i], axis=-1).item()
+                    mean_ll = jnp.mean(new_ll[_i], axis=-1).item()
+                    best_ll = jnp.max(new_ll[_i], axis=-1).item()
+                    mean_obj = jnp.mean(eval_val[_i], axis=-1).item()
+                    best_obj = jnp.max(eval_val[_i], axis=-1).item()
                     mean_penalty = jnp.mean(penalty_val[_i], axis=-1).item()
-                    bks_obj = best_eval_val_log[_i].item()
+                    bks_obj = best_eval_val[_i].item()
 
                     if _i == 0:
                         if len(cur_temp.shape) > 1:  # FIXME: why does cur_temp have length 2?
                             print(
-                                f"instance{_j}, temp_min: {cur_temp[0, 0]}, temp_max: {cur_temp[0, -1]}",
+                                f"instance{_j}, temp_min: {cur_temp[0, 0]:.4f}, temp_max: {cur_temp[0, -1]:.4f}",
                                 end=" ",
                             )
                         else:
                             print(f"instance{_j}, temp: {cur_temp}", end=" ")
                         print(
-                            f"bks_obj: {bks_obj}, best_obj: {best_obj}, mean_obj: {mean_obj}, mean_penalty: {mean_penalty}"
+                            f"bks_obj: {bks_obj:.4f}, best_ll: {best_ll:.4f}, mean_ll: {mean_ll:.4f}, best_obj: {best_obj:.4f}, mean_obj: {mean_obj:.4f}, mean_penalty: {mean_penalty:.4f}"
                         )
                         if "pt" in self.config.t_schedule:
                             print(
-                                f"pt_step: {pt_step}, mean_accept: {mean_accept}, first_pair_accept: {acceptance_ratio[0][0]}, last_pair_accept: {acceptance_ratio[0][-1]}"
+                                f"pt_step: {pt_step}, mean_accept: {mean_accept:.4f}, first_pair_accept: {acceptance_ratio[0][0]:.4f}, last_pair_accept: {acceptance_ratio[0][-1]:.4f}"
                             )
 
                     wandb.log(
                         {
                             f"instance{_j}/bks_obj": bks_obj,
+                            f"instance{_j}/best_ll": best_ll,
+                            f"instance{_j}/mean_ll": mean_ll,
                             f"instance{_j}/best_obj": best_obj,
                             f"instance{_j}/mean_obj": mean_obj,
                             f"instance{_j}/mean_penalty": mean_penalty,
