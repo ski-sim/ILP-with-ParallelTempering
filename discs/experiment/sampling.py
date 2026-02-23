@@ -20,6 +20,7 @@ class Experiment:
     def __init__(self, config):
         self.config = config.experiment
         self.config_model = config.model
+        self.sampler_name = config.sampler.name
         self.parallel = False
         self.sample_idx = None
         self.num_saved_samples = config.get("nun_saved_samples", 4)
@@ -296,9 +297,14 @@ class CO_Experiment(Experiment):
         )
         fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
 
-        wandb.init(
-            name=f"{self.config_model.graph_type}_{self.config_model.max_num_nodes}_{self.config_model.name}_{self.config.t_schedule}_{self.config.init_temperature}_{self.config.decay_rate}_{self.config.pt}_{self.config.pt_interval}_{self.config.t_min}_{self.config.t_max}_{self.config.batch_size}"
-        )
+        wandb_name = f"{self.config_model.graph_type}_{self.config_model.max_num_nodes}_{self.sampler_name}_{self.config_model.formulation}_lambda{self.config_model.penalty}_bsz{self.config.batch_size}_{self.config.t_schedule}_decay{self.config.decay_rate}"
+        if self.config.t_schedule == "exp_decay":
+            wandb_name += f"_init{self.config.init_temperature}"
+        elif self.config.t_schedule == "pt_exp_decay":
+            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}"
+        else:
+            raise ValueError(f"Unknown t_schedule: {self.config.t_schedule}")
+        wandb.init(name=wandb_name)
 
         # reheated mechanism
         best_eval_val = jnp.ones(self.config.num_models) * -jnp.inf
