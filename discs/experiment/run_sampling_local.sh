@@ -53,4 +53,4 @@ python -m discs.experiment.main_sampling \
    --penalty_weight=${penalty_weight} --formulation=${formulation} --reweight=None \
    --num_instances=20 --num_models=1 --batch_size=15 --chain_length=100000 \
    --t_schedule=${t_schedule} --init_temperature=${init_temperature} --decay_rate=0.5 \
-   --pt=deo --pt_interval=100 --t_min=${t_min} --t_max=${t_max} --log_every_steps=100 --mode=test
+   --pt=deo --pt_interval=200 --t_min=${t_min} --t_max=${t_max} --log_every_steps=100 --mode=test
