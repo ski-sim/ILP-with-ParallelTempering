@@ -23,6 +23,7 @@ def get_config(FLAGS):
             formulation=FLAGS.formulation,  # indicator
             mode=FLAGS.mode,
             max_runtime=FLAGS.max_runtime,
+            step_limit=FLAGS.step_limit,
         ),
         sampler=dict(
             name="",

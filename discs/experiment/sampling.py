@@ -12,6 +12,9 @@ import optax
 import tqdm
 from discs.common.parallel_tempering import swap_samples_deo, swap_samples_seo
 import wandb
+import os
+os.environ["WANDB_API_KEY"] = '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'
+
 
 
 class Experiment:
@@ -392,14 +395,16 @@ class CO_Experiment(Experiment):
                     elapsed_time / (self.config_model.max_runtime / self.config.log_every_steps)
                     >= num_log
                 )
-            else:  # self.config_model.mode == "val"
+            else:  # self.config_model.mode == "val" or "test_step"
                 log_cond = step % self.config.log_every_steps == 0
 
-            terminate_cond = (
-                self.config_model.mode == "test"
-                and elapsed_time > self.config_model.max_runtime
-                and num_log > self.config_model.max_runtime // self.config.log_every_steps
-            )
+            if self.config_model.mode == "test_step":
+                terminate_cond = step >= self.config_model.step_limit
+            elif self.config_model.mode == "test":
+                terminate_cond = (
+                    elapsed_time > self.config_model.max_runtime
+                    and num_log > self.config_model.max_runtime // self.config.log_every_steps
+                )
 
             if log_cond or terminate_cond:
                 num_log += 1
@@ -446,9 +451,14 @@ class CO_Experiment(Experiment):
                     )
 
                 if terminate_cond:
-                    print(
-                        f"time limit {self.config_model.max_runtime}s reached, early stopping burn-in (step: {step})"
-                    )
+                    if self.config_model.mode == "test":
+                        print(
+                            f"time limit {self.config_model.max_runtime}s reached, early stopping burn-in (step: {step})"
+                        )
+                    elif self.config_model.mode == "test_step":
+                        print(
+                            f"step limit {self.config_model.step_limit} reached, early stopping burn-in (step: {step})"
+                        )
                     break
 
                 sample_mask = sample_mask.reshape(best_ratio.shape)
