@@ -58,7 +58,7 @@ fi
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.96
 export XLA_FLAGS="--xla_gpu_enable_triton_gemm=false"
 
-taskset -c 32-47 python -m discs.experiment.main_sampling \
+taskset -c 0-31 python -m discs.experiment.main_sampling \
    --sampler_config="discs/samplers/configs/${sampler?}_config.py" \
    --run_local=True --save_root=./discs/results --model=ilp \
    --graph_type=${graph_type} --max_num_nodes=${max_num_nodes} --max_num_constraints=${max_num_constraints} \
