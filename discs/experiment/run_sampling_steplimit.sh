@@ -76,12 +76,12 @@ elif [ "$graph_type" == "sc" ]; then
    if [ "$max_num_nodes" == 2000 ]; then
       max_num_constraints=5000
       if [ "$t_schedule" == "exp_decay" ]; then
-      step_limit=90000
+         step_limit=90000
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
-      step_limit=85000
+         step_limit=85000
       else
-      echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
-      exit 1
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
       fi
    elif [ "$max_num_nodes" == 4000 ]; then
       max_num_constraints=5000
@@ -111,6 +111,6 @@ python -m discs.experiment.main_sampling \
    --run_local=True --save_root=./discs/results --model=ilp \
    --graph_type=${graph_type} --max_num_nodes=${max_num_nodes} --max_num_constraints=${max_num_constraints} \
    --penalty_weight=${penalty_weight} --formulation=${formulation} --reweight=None \
-   --num_instances=20 --num_models=1 --batch_size=15 --chain_length=100000 \
+   --num_instances=100 --num_models=1 --batch_size=15 --chain_length=100000 \
    --t_schedule=${t_schedule} --init_temperature=${init_temperature} --decay_rate=0.5 \
    --pt=deo --pt_interval=200 --t_min=${t_min} --t_max=${t_max} --log_every_steps=100 --mode=test_step --step_limit=${step_limit}

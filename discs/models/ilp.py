@@ -23,6 +23,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         return data_list
 
     def penalty(self, params, x):
+        # TODO: use scan
         batch_size = x.shape[0]
         num_vars = x.shape[-1]
         num_constraints = params["constraint_matrix"].shape[0]
@@ -38,10 +39,8 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
             Ax = jnp.dot(params["constraint_matrix"], x.T)
         ub = params["constraint_rhs"][:, None]
         lb = params["constraint_lhs"][:, None]
-        if self.formulation == "obj":
-            return jnp.zeros(batch_size)
-        elif self.formulation == "lagrangian":
-            violation = lb - ub  # == Ax - ub + lb - Ax
+        if self.formulation == "obj" or self.formulation == "lagrangian":
+            return jnp.zeros(batch_size)  # Ax - lb + ub - Ax is constant w.r.t. x
         elif self.formulation == "max_linear":
             violation = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))
         elif self.formulation == "max_linear_square":
@@ -71,19 +70,18 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         if self.config.graph_type == "sc":
             obj_x = -obj_x
 
-        if self.formulation == "obj":
+        v_curr = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))  # [batch, M]
+        if self.formulation == "obj" or self.formulation == "lagrangian":
             penalty_x = jnp.zeros(batch_size)
-        elif self.formulation == "lagrangian":
-            penalty_x = self.penalty_coeff * jnp.sum(lb - ub, axis=-1)
-        elif self.formulation == "max_linear":
-            v_curr = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))  # [batch, M]
-            penalty_x = self.penalty_coeff * jnp.sum(v_curr, axis=-1)
-        elif self.formulation == "max_linear_square":
-            v_curr = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))  # [batch, M]
-            penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=-1)
+            is_valid_x = jnp.sum(v_curr, axis=-1) <= 1e-3  # [batch]  # 1e-3 is a small threshold
+        else:
+            if self.formulation == "max_linear":
+                penalty_x = self.penalty_coeff * jnp.sum(v_curr, axis=-1)
+            elif self.formulation == "max_linear_square":
+                penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=-1)
+            is_valid_x = penalty_x <= 1e-3  # [batch]  # 1e-3 is a small threshold
 
         ll_x = (obj_x - penalty_x) / temp  # [batch]
-        is_valid_x = penalty_x <= 1e-3  # [batch]  # 1e-3 is a small threshold for valid solution
 
         delta_x = 1 - 2 * x  # [batch, N]
         delta_obj = c[None, :] * delta_x  # [batch, N]
@@ -91,7 +89,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
             delta_obj = -delta_obj
 
         if self.formulation == "obj" or self.formulation == "lagrangian":
-            penalty_new = penalty_x
+            penalty_new = jnp.zeros((batch_size, N))
         else:
             # Scan over M (constraints)
             excess_upper = Ax - ub[None, :]  # [batch, M]

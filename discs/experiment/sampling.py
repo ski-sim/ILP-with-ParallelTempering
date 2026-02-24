@@ -389,10 +389,9 @@ class CO_Experiment(Experiment):
             elapsed_time += step_time
 
             if self.config_model.mode == "test":
-                log_cond = (
-                    elapsed_time / (self.config_model.max_runtime / self.config.log_every_steps)
-                    >= num_log
-                )
+                log_cond = elapsed_time / (
+                    self.config_model.max_runtime / self.config.log_every_steps
+                ) >= (num_log + 1)
             elif self.config_model.mode == "test_step":
                 log_cond = step % (self.config_model.step_limit / self.config.log_every_steps) == 0
             else:  # self.config_model.mode == "val" or "test_step"
@@ -443,6 +442,8 @@ class CO_Experiment(Experiment):
                             f"instance{_j}/mean_obj": mean_obj,
                             f"instance{_j}/mean_penalty": mean_penalty,
                             f"instance{_j}/mean_accept": mean_accept,
+                            f"instance{_j}/elapsed_time": elapsed_time,
+                            f"instance{_j}/step": step,
                             **{
                                 f"instance{_j}/swap_accept_{pairs[k]}": acceptance_ratio[0][k]
                                 for k in range(len(pairs))

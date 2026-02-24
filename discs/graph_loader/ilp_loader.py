@@ -99,21 +99,22 @@ class ILPGraphGen:
             if fname.endswith(".mps") or fname.endswith(".lp"):
                 file_list.append(os.path.join(data_folder, fname))
         self.file_list = sorted(file_list, key=lambda x: int(x.split("_")[-1].split(".")[0]))
-        if (
-            model_config.max_num_nodes > 0
-            and model_config.max_num_constraints > 0
-            and model_config.num_instances > 0
-        ):
-            self._max_num_nodes = model_config.max_num_nodes
-            self._max_num_constraints = model_config.max_num_constraints
-            self._num_instances = model_config.num_instances
+
+        if model_config.num_instances > len(self.file_list):
+            print(
+                f"Warning: num_instances {model_config.num_instances} is greater than the number of instances {len(self.file_list)}"
+            )
+            model_config.num_instances = len(self.file_list)
         else:
-            for fname in self.file_list:
-                with open(fname, "rb") as f:
-                    g = pickle.load(f)
-                    self._max_num_nodes = max(self._max_num_nodes, len(g))
-                    self._max_num_constraints = max(self._max_num_constraints, len(g.edges()))
-                    self._num_instances += 1
+            self.file_list = self.file_list[: model_config.num_instances]
+
+        assert model_config.num_instances > 0
+        assert model_config.max_num_nodes > 0
+        assert model_config.max_num_constraints > 0
+        self._num_instances = model_config.num_instances
+        self._max_num_nodes = model_config.max_num_nodes
+        self._max_num_constraints = model_config.max_num_constraints
+
         print("max num nodes", self.max_num_nodes)
         print("max num constraints", self.max_num_constraints)
         print("num instances", self.num_instances)
