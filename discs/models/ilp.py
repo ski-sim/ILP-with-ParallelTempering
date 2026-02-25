@@ -13,7 +13,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         self.max_num_nodes = self.config.max_num_nodes
         self.penalty_coeff = self.config.get("penalty", 2.0)
         self.formulation = self.config.get("formulation", "max_linear")
-        self.chunk_size = self.config.get("chunk_size", 2000)
+        self.chunk_size = self.config.get("chunk_size", 1000)
 
     def make_init_params(self, rng):
         try:
@@ -23,30 +23,39 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         return data_list
 
     def penalty(self, params, x):
-        # TODO: use scan
         batch_size = x.shape[0]
-        num_vars = x.shape[-1]
-        num_constraints = params["constraint_matrix"].shape[0]
-        if num_vars > self.chunk_size:
-            Ax = jnp.zeros((num_constraints, batch_size), dtype=jnp.float32)
-            for i in range(0, num_vars, self.chunk_size):
-                x_chunk = x[..., i : i + self.chunk_size]
-                Ax_chunk = jnp.dot(
-                    params["constraint_matrix"][:, i : i + self.chunk_size], x_chunk.T
-                )
-                Ax += Ax_chunk
-        else:
-            Ax = jnp.dot(params["constraint_matrix"], x.T)
-        ub = params["constraint_rhs"][:, None]
-        lb = params["constraint_lhs"][:, None]
         if self.formulation == "obj" or self.formulation == "lagrangian":
-            return jnp.zeros(batch_size)  # Ax - lb + ub - Ax is constant w.r.t. x
-        elif self.formulation == "max_linear":
-            violation = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))
-        elif self.formulation == "max_linear_square":
-            violation = jnp.square(jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax)))
-        penalty = self.penalty_coeff * jnp.sum(violation, axis=0)
-        return penalty
+            return jnp.zeros(batch_size)
+
+        A = params["constraint_matrix"]  # [M, N]
+        ub = params["constraint_rhs"]  # [M]
+        lb = params["constraint_lhs"]  # [M]
+        M = A.shape[0]
+
+        m_chunk = min(self.chunk_size, M)
+        pad_m = (-M) % m_chunk
+        if pad_m > 0:
+            A = jnp.pad(A, ((0, pad_m), (0, 0)))
+            ub = jnp.pad(ub, (0, pad_m), constant_values=jnp.inf)
+            lb = jnp.pad(lb, (0, pad_m), constant_values=-jnp.inf)
+
+        num_m_chunks = (M + pad_m) // m_chunk
+        A_scan = A.reshape(num_m_chunks, m_chunk, -1)
+        ub_scan = ub.reshape(num_m_chunks, m_chunk)
+        lb_scan = lb.reshape(num_m_chunks, m_chunk)
+
+        def scan_body(penalty_acc, inputs):
+            A_chunk, ub_chunk, lb_chunk = inputs
+            Ax_chunk = jnp.dot(A_chunk, x.T)  # [m_chunk, batch]
+            v = jnp.maximum(
+                0, jnp.maximum(Ax_chunk - ub_chunk[:, None], lb_chunk[:, None] - Ax_chunk)
+            )
+            if self.formulation == "max_linear_square":
+                v = jnp.square(v)
+            return penalty_acc + jnp.sum(v, axis=0), None
+
+        penalty, _ = jax.lax.scan(scan_body, jnp.zeros(batch_size), (A_scan, ub_scan, lb_scan))
+        return self.penalty_coeff * penalty
 
     def objective(self, params, x):
         obj = jnp.dot(x, params["obj_coeffs"])
@@ -54,7 +63,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
             obj = -obj
         return obj
 
-    def logratio_in_neighborhood(self, params, x, m_chunk_size=1000):
+    def logratio_in_neighborhood(self, params, x):
         A = params["constraint_matrix"]  # [M, N]
         c = params["obj_coeffs"]  # [N]
         ub = params["constraint_rhs"]  # [M]
@@ -63,7 +72,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
 
         batch_size, N = x.shape
         M = A.shape[0]
-        m_chunk = min(m_chunk_size, M)
+        m_chunk = min(self.chunk_size, M)
 
         Ax = x @ A.T  # [batch, M]
         obj_x = x @ c  # [batch]

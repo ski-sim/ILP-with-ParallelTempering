@@ -121,9 +121,17 @@ class Saver:
         results["best_ratio_mean"] = np.mean(np.array(best_ratio))
         if len(best_samples) != 0:
             results["best_samples"] = np.array(best_samples)
+
+        sampler_name = self.config.sampler.name
+        if "path_auxiliary" in sampler_name:
+            sampler_name = (
+                sampler_name
+                + f"_num_flips{self.config.sampler.num_flips}"
+                + ("_adaptive" if self.config.sampler.adaptive else "")
+            )
         self._dump_dict(
             results,
-            f"results_{self.config.model.name}_{self.config.model.graph_type}_{self.config.model.max_num_nodes}_{self.config.sampler.name}_{self.config.model.formulation}_{self.config.experiment.final_temperature}_{self.config.experiment.init_temperature}_{self.config.sampler.num_flips}_{self.config.model.penalty}_{self.config.experiment.t_schedule}_{self.config.experiment.decay_rate}_{self.config.experiment.pt}_{self.config.experiment.pt_interval}_{self.config.experiment.t_min}_{self.config.experiment.t_max}_{self.config.experiment.reweight}_{self.config.experiment.batch_size}",
+            f"results_{self.config.model.name}_{self.config.model.graph_type}_{self.config.model.max_num_nodes}_{sampler_name}_{self.config.model.formulation}_{self.config.experiment.final_temperature}_{self.config.experiment.init_temperature}_{self.config.model.penalty}_{self.config.experiment.t_schedule}_{self.config.experiment.decay_rate}_{self.config.experiment.pt}_{self.config.experiment.pt_interval}_{self.config.experiment.t_min}_{self.config.experiment.t_max}_{self.config.experiment.reweight}_{self.config.experiment.batch_size}",
         )
 
     def dump_params(self, params):
