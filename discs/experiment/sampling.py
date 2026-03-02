@@ -376,7 +376,7 @@ class CO_Experiment(Experiment):
                 and step % self.config.pt_interval == 0
             ):
                 new_x, acceptance_ratio, indices_a, indices_b = pt_fn(
-                    new_x, new_ll, params["temperature"], rng, step
+                    new_x, new_ll, params["temperature"], rng, pt_step
                 )
                 mean_accept = jnp.mean(acceptance_ratio)
                 # FIXME: remove [0] later
