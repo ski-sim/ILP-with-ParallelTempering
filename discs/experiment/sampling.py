@@ -22,6 +22,12 @@ class Experiment:
         self.config = config.experiment
         self.config_model = config.model
         self.sampler_name = config.sampler.name
+        if "lbp" in self.sampler_name or "path_auxiliary" in self.sampler_name:
+            self.sampler_name = (
+                self.sampler_name
+                + f"_nflip{config.sampler.num_flips}"
+                + ("_adaptive" if config.sampler.adaptive else "")
+            )
         self.parallel = False
         self.sample_idx = None
         self.num_saved_samples = config.get("nun_saved_samples", 4)
@@ -87,8 +93,8 @@ class Experiment:
         fn_breshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
         if reshape_all:
             if not use_put_replicated:
-                state = jax.tree_map(fn_breshape, state)
-                params = jax.tree_map(fn_breshape, params)
+                state = jax.tree_util.tree_map(fn_breshape, state)
+                params = jax.tree_util.tree_map(fn_breshape, params)
             else:
                 params = jax.device_put_replicated(params, jax.local_devices())
                 state = jax.device_put_replicated(state, jax.local_devices())
@@ -232,7 +238,7 @@ class CO_Experiment(Experiment):
         """Temperature schedule."""
 
         if config.t_schedule == "constant":
-            schedule = lambda step: step * 0 + config.init_temperature
+            schedule = lambda step: step * 0 + jnp.array(config.init_temperature)
         elif config.t_schedule == "linear":
             assert config.final_temperature is not None  # cannot be None for linear schedule
             schedule = optax.linear_schedule(
@@ -243,7 +249,7 @@ class CO_Experiment(Experiment):
                 config.init_temperature,
                 config.chain_length,
                 config.decay_rate,
-                end_value=config.final_temperature,  # can be None
+                end_value=0.0,
             )
         elif config.t_schedule == "pt":
             schedule = (
@@ -298,11 +304,15 @@ class CO_Experiment(Experiment):
         )
         fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
 
-        wandb_name = f"{self.config_model.graph_type}_{self.config_model.max_num_nodes}_{self.sampler_name}_{self.config_model.formulation}_lambda{self.config_model.penalty}_bsz{self.config.batch_size}_{self.config.t_schedule}_decay{self.config.decay_rate}"
-        if self.config.t_schedule == "exp_decay":
+        wandb_name = f"{self.config_model.graph_type}_{self.config_model.max_num_nodes}_{self.sampler_name}_{self.config_model.formulation}_lambda{self.config_model.penalty}_bsz{self.config.batch_size}_{self.config.t_schedule}"
+        if self.config.t_schedule == "constant":
             wandb_name += f"_init{self.config.init_temperature}"
-        elif self.config.t_schedule == "pt_exp_decay":
+        elif self.config.t_schedule == "exp_decay":
+            wandb_name += f"_init{self.config.init_temperature}_decay{self.config.decay_rate}"
+        elif self.config.t_schedule == "pt":
             wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}"
+        elif self.config.t_schedule == "pt_exp_decay":
+            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}_decay{self.config.decay_rate}"
         else:
             raise ValueError(f"Unknown t_schedule: {self.config.t_schedule}")
         wandb.init(name=wandb_name)

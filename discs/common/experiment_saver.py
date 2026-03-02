@@ -123,10 +123,10 @@ class Saver:
             results["best_samples"] = np.array(best_samples)
 
         sampler_name = self.config.sampler.name
-        if "path_auxiliary" in sampler_name:
+        if "lbp" in sampler_name or "path_auxiliary" in sampler_name:
             sampler_name = (
                 sampler_name
-                + f"_num_flips{self.config.sampler.num_flips}"
+                + f"_nflip{self.config.sampler.num_flips}"
                 + ("_adaptive" if self.config.sampler.adaptive else "")
             )
         self._dump_dict(

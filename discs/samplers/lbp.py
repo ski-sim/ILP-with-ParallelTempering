@@ -14,6 +14,7 @@ class LBPforILP(locallybalanced.LocallyBalancedSampler):
     def __init__(self, config: ml_collections.ConfigDict):
         super().__init__(config)
         self.num_flips = config.sampler.get("num_flips", 1)
+        self.adaptive = config.sampler.get("adaptive", False)  # TODO
         self.batch_rows = jnp.expand_dims(jnp.arange(config.experiment.batch_size), axis=1)
 
     def step(self, model, rng, x, model_param, state, x_mask=None):
