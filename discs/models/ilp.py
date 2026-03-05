@@ -59,7 +59,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
 
     def objective(self, params, x):
         obj = jnp.dot(x, params["obj_coeffs"])
-        if self.config.graph_type == "sc":
+        if self.config.graph_type in ["sc", "mvc"]:
             obj = -obj
         return obj
 
@@ -76,7 +76,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
 
         Ax = x @ A.T  # [batch, M]
         obj_x = x @ c  # [batch]
-        if self.config.graph_type == "sc":
+        if self.config.graph_type in ["sc", "mvc"]:
             obj_x = -obj_x
 
         v_curr = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))  # [batch, M]
@@ -94,7 +94,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
 
         delta_x = 1 - 2 * x  # [batch, N]
         delta_obj = c[None, :] * delta_x  # [batch, N]
-        if self.config.graph_type == "sc":
+        if self.config.graph_type in ["sc", "mvc"]:
             delta_obj = -delta_obj
 
         if self.formulation == "obj" or self.formulation == "lagrangian":

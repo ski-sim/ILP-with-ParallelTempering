@@ -12,3 +12,4 @@ sco_test/
 wandb/
 results/
 .vscode/
+sco_val/

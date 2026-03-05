@@ -4,8 +4,39 @@ t_schedule=$3  # exp_decay, pt_exp_decay
 sampler=${4:-lbp}
 formulation=${5:-max_linear_square}
 
+
+if [ "$graph_type" == "mvc" ]; then
+   penalty_weight=5
+   init_temperature=0.2
+   t_min=0.2
+   t_max=0.4
+   if [ "$max_num_nodes" == 1000 ]; then
+      max_num_constraints=65100
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=30000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=30000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   elif [ "$max_num_nodes" == 2000 ]; then
+      max_num_constraints=15000
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=55000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=52000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   else
+      echo "max_num_nodes should be 1500 or 3000"
+      exit 1
+   fi
+
 # MIS
-if [ "$graph_type" == "mis" ]; then
+elif [ "$graph_type" == "mis" ]; then
    penalty_weight=2
    init_temperature=0.2
    t_min=0.2
