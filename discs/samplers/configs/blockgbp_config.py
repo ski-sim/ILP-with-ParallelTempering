@@ -8,6 +8,6 @@ def get_config():
       balancing_fn_type='SQRT',
       num_flips=1,
       adaptive=False,
-      name='blocklbp',
+      name='blockgbp',
   )
   return config_dict.ConfigDict(sampler_config)

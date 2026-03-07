@@ -50,15 +50,14 @@ class BlockLBPSampler(locallybalanced.LocallyBalancedSampler):
         start_index = state['index'] # 추가
         indices_to_flip = jnp.arange(self.block_size) + start_index # 추가
 
-        ll_x, y, trajectory, num_calls_forward, is_valid_x = self.proposal(
+        ll_x, ll_y, ll_y2x, y, trajectory, num_calls_forward, is_valid_x = self.proposal(
                 model, rng_new_sample, x, model_param, state, indices_to_flip
             )
         ll_x2y = trajectory["ll_x2y"]
 
+        num_calls_backward = num_calls_forward 
+        is_valid_y = is_valid_x
 
-        ll_y, ll_y2x, num_calls_backward, is_valid_y = self.ll_y2x(
-            model, x, model_param, trajectory, y, indices_to_flip
-        )
 
         log_acc = ll_y + ll_y2x - ll_x - ll_x2y
         new_x, new_state = self.select_sample(
@@ -110,8 +109,10 @@ class BlockLBPSampler(locallybalanced.LocallyBalancedSampler):
         ll_x = (obj_x - penalty_x) / temp  # [batch]
 
         c_sub = c[indices_to_flip]
-        delta_x = 1 - 2 * x[:,indices_to_flip]
-        delta_obj = c_sub[None, :] * delta_x
+        obj_new = self.categories_iter @ c_sub  # [candidates]
+        obj_current = x[:, indices_to_flip] @ c_sub  # [batch]
+        delta_obj = obj_new[None, :] - obj_current[:, None]  # [batch, candidates]
+
         if self.config.model.graph_type in ["sc", "mvc"]:
             delta_obj = -delta_obj
 
@@ -139,14 +140,13 @@ class BlockLBPSampler(locallybalanced.LocallyBalancedSampler):
             def scan_body(penalty_acc, inputs):
                 A_chunk, Ax_chunk, eu_chunk, el_chunk = inputs
                 # A_chunk: [m_chunk, N], eu/el_chunk: [batch, m_chunk]
+                # self.categories_iter: [candidates, block_size]
 
                 A_sub = A_chunk[:, indices_to_flip]  # [m_chunk, block_size]
-                shift = A_sub[None, :, :] * delta_x[:, None, :]  # [batch, m_chunk, N]
+                penalty_current = x[:, indices_to_flip] @ A_sub.T  # [batch, m_chunk]
+                penalty_new = self.categories_iter @ A_sub.T  # [candidates, m_chunk]
 
-                # penalty_current = x[:, indices_to_flip] @ A_sub.T  # [batch, m_chunk]
-                # penalty_new = self.categories_iter @ A_sub.T  # [candidates, m_chunk]
-
-                # shift = penalty_new.transpose(1,0)[None,:,:] - penalty_current[:,:,None] # [batch, m_chunk]
+                shift = penalty_new.transpose(1,0)[None,:,:] - penalty_current[:,:,None] # [batch, m_chunk]
                 v_new = jnp.maximum(
                         0, jnp.maximum(eu_chunk[:, :, None] + shift, el_chunk[:, :, None] - shift)
                     )
@@ -156,27 +156,27 @@ class BlockLBPSampler(locallybalanced.LocallyBalancedSampler):
                 else:  # formulation == "max_linear_square"
                     return penalty_acc + jnp.sum(jnp.square(v_new), axis=1), None
             penalty_new, _ = jax.lax.scan(
-                scan_body,  jnp.zeros((batch_size, len(indices_to_flip))),(A_scan, Ax_scan, eu_scan, el_scan)
+                scan_body,  jnp.zeros((batch_size, candidates_size)),(A_scan, Ax_scan, eu_scan, el_scan)
             )
             penalty_new = self.config.model.penalty * penalty_new
         
         ll_new = (obj_x[:, None] + delta_obj - penalty_new) / temp[:, None]
         logratios = ll_new - ll_x[:, None]
 
-        return ll_x, logratios, 1, self.neighborhood_fn, is_valid_x
+        return ll_x, logratios, 1, self.neighborhood_fn, is_valid_x, ll_new
 
     def get_local_dist(self, model, x, model_param, indices_to_flip):
         # Lazy initialization: create neighborhood_fn only once
-        ll_x, logratio, num_calls, _, is_valid_x = self.neighborhood_fn(model_param, x, indices_to_flip)
+        ll_x, logratio, num_calls, _, is_valid_x, ll_new = self.neighborhood_fn(model_param, x, indices_to_flip)
 
         logits = self.apply_weight_function_logscale(logratio)
         if self.num_categories != 2:
             logits = logits * (1 - x) + x * -1e9
         log_prob = jax.nn.log_softmax(logits, -1)
-        return ll_x, log_prob, num_calls, is_valid_x
+        return ll_x, log_prob, num_calls, is_valid_x, ll_new
 
     def proposal(self, model, rng, x, model_param, state, indices_to_flip):
-        ll_x, log_prob, num_calls, is_valid_x = self.get_local_dist(model, x, model_param, indices_to_flip)
+        ll_x, log_prob, num_calls, is_valid_x, ll_new = self.get_local_dist(model, x, model_param, indices_to_flip)
 
         if self.num_categories > 2:
             log_prob_all = jnp.reshape(log_prob, [log_prob.shape[0], -1, self.num_categories])
@@ -187,30 +187,24 @@ class BlockLBPSampler(locallybalanced.LocallyBalancedSampler):
         selected_idx, ll_selected = math.multinomial(
             rng, log_prob, self.num_flips, replacement=False, return_ll=True, is_nsample_const=True
         )
-        if self.num_categories > 2:
-            val_logprob = log_prob_all[self.batch_rows, selected_idx]
-            rng, _ = jax.random.split(rng)
-            new_val = jax.random.categorical(rng, val_logprob)
-            new_val = jax.nn.one_hot(new_val, self.num_categories)
-        else:
-            new_val = 1 - x[self.batch_rows, selected_idx + indices_to_flip[0]]
-        y = x.at[self.batch_rows, selected_idx + indices_to_flip[0]].set(new_val)
 
-        trajectory = {
-            "ll_x2y": jnp.sum(ll_selected, axis=-1),
-            "selected_idx": selected_idx,
-        }
-        return ll_x,  y, trajectory, num_calls, is_valid_x
+        # if self.num_categories > 2:
+        #     val_logprob = log_prob_all[self.batch_rows, selected_idx]
+        #     rng, _ = jax.random.split(rng)
+        #     new_val = jax.random.categorical(rng, val_logprob)
+        #     new_val = jax.nn.one_hot(new_val, self.num_categories)
+        # else:
+        #     new_val = 1 - x[self.batch_rows, selected_idx]
 
-    def ll_y2x(self, model, x, model_param, forward_trajectory, y, indices_to_flip):
-        ll_y, log_prob, num_calls, is_valid_y = self.get_local_dist(model, y, model_param, indices_to_flip)
-
-        if self.num_categories > 2:
-            log_prob_all = jnp.reshape(log_prob, [log_prob.shape[0], -1, self.num_categories])
-            log_prob = special.logsumexp(log_prob_all, axis=-1)
-            log_prob_all = jax.nn.log_softmax(log_prob_all, axis=-1)
-        backwd_ll = jnp.take_along_axis(log_prob, forward_trajectory["selected_idx"], -1) # (batch,1)
+        y = x.at[self.batch_rows, indices_to_flip].set( self.categories_iter[selected_idx].squeeze(axis=1))
         
+        
+        ll_y = jnp.take_along_axis(ll_new, selected_idx, axis=-1)[:, 0] # calculate ll_y
+
+        x_flipped = x[:, indices_to_flip]
+        matched_indices = jnp.sum(x_flipped * self._category_powers, axis=-1).astype(jnp.int32)
+        backward_indices = matched_indices[:, None]
+        backwd_ll = jnp.take_along_axis(log_prob,backward_indices, -1)
         ll_y2x_traj = math.noreplacement_sampling_renormalize(backwd_ll)
         if self.num_categories > 2:
             val_logprob = log_prob_all[
@@ -226,7 +220,12 @@ class BlockLBPSampler(locallybalanced.LocallyBalancedSampler):
         if self.num_categories > 2:
             ll_y2x = ll_y2x + jnp.sum(ll_val, axis=-1)
 
-        return ll_y, ll_y2x, num_calls, is_valid_y
+
+        trajectory = {
+            "ll_x2y": jnp.sum(ll_selected, axis=-1),
+            "selected_idx": selected_idx,
+        }
+        return ll_x, ll_y, ll_y2x, y, trajectory, num_calls, is_valid_x
 
     def select_sample(
         self,
