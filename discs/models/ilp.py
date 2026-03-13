@@ -11,9 +11,22 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         super().__init__(config)
         self.config = config.model
         self.max_num_nodes = self.config.max_num_nodes
-        self.penalty_coeff = self.config.get("penalty", 2.0)
+        self.config_experiment = config.experiment
+        if self.config_experiment.t_schedule in ["pen_pt", "pen_pt_exp_decay"]:
+            coeff = jnp.linspace(
+                self.config_experiment.l_min, self.config_experiment.l_max,
+                num=self.config_experiment.batch_size,
+            )
+            self.penalty_coeff_1d = coeff          # [batch_size]
+            self.penalty_coeff_2d = coeff[:, None]  # [batch_size, 1]
+        else:
+            self.penalty_coeff_1d = self.config.get("penalty", 2.0)
+            self.penalty_coeff_2d = self.penalty_coeff_1d
         self.formulation = self.config.get("formulation", "max_linear")
         self.chunk_size = self.config.get("chunk_size", 1000)
+
+        # Precompute flags / helpers to eliminate repeated if-statements
+        self.obj_sign = -1.0 if self.config.graph_type in ("sc", "mvc") else 1.0
 
     def make_init_params(self, rng):
         try:
@@ -55,13 +68,10 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
             return penalty_acc + jnp.sum(v, axis=0), None
 
         penalty, _ = jax.lax.scan(scan_body, jnp.zeros(batch_size), (A_scan, ub_scan, lb_scan))
-        return self.penalty_coeff * penalty
+        return self.penalty_coeff_1d * penalty
 
     def objective(self, params, x):
-        obj = jnp.dot(x, params["obj_coeffs"])
-        if self.config.graph_type in ["sc", "mvc"]:
-            obj = -obj
-        return obj
+        return self.obj_sign * jnp.dot(x, params["obj_coeffs"])
 
     def logratio_in_neighborhood(self, params, x):
         A = params["constraint_matrix"]  # [M, N]
@@ -75,9 +85,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         m_chunk = min(self.chunk_size, M)
 
         Ax = x @ A.T  # [batch, M]
-        obj_x = x @ c  # [batch]
-        if self.config.graph_type in ["sc", "mvc"]:
-            obj_x = -obj_x
+        obj_x = self.obj_sign * (x @ c)  # [batch]
 
         v_curr = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))  # [batch, M]
         if self.formulation == "obj" or self.formulation == "lagrangian":
@@ -85,17 +93,13 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
             is_valid_x = jnp.sum(v_curr, axis=-1) <= 1e-3  # [batch]  # 1e-3 is a small threshold
         else:
             if self.formulation == "max_linear":
-                penalty_x = self.penalty_coeff * jnp.sum(v_curr, axis=-1)
+                penalty_x = self.penalty_coeff_1d * jnp.sum(v_curr, axis=-1)
             elif self.formulation == "max_linear_square":
-                penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=-1)
+                penalty_x = self.penalty_coeff_1d * jnp.sum(jnp.square(v_curr), axis=-1)
             is_valid_x = penalty_x <= 1e-3  # [batch]  # 1e-3 is a small threshold
-
         ll_x = (obj_x - penalty_x) / temp  # [batch]
-
         delta_x = 1 - 2 * x  # [batch, N]
-        delta_obj = c[None, :] * delta_x  # [batch, N]
-        if self.config.graph_type in ["sc", "mvc"]:
-            delta_obj = -delta_obj
+        delta_obj = self.obj_sign * c[None, :] * delta_x  # [batch, N]
 
         if self.formulation == "obj" or self.formulation == "lagrangian":
             penalty_new = jnp.zeros((batch_size, N))
@@ -133,11 +137,10 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
             penalty_new, _ = jax.lax.scan(
                 scan_body, jnp.zeros((batch_size, N)), (A_scan, eu_scan, el_scan)
             )
-            penalty_new = self.penalty_coeff * penalty_new
+            penalty_new = self.penalty_coeff_2d * penalty_new
 
         ll_new = (obj_x[:, None] + delta_obj - penalty_new) / temp[:, None]
         logratios = ll_new - ll_x[:, None]
-
         return ll_x, logratios, 1, self.get_neighbor_fn, is_valid_x
 
 

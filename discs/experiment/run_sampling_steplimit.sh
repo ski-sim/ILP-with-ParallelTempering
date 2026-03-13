@@ -6,8 +6,8 @@ formulation=${5:-max_linear_square}
 
 
 if [ "$graph_type" == "mvc" ]; then
-   penalty_weight=5
-   init_temperature=0.2
+   penalty_weight=2
+   init_temperature=0.1
    t_min=0.2
    t_max=0.4
    if [ "$max_num_nodes" == 1000 ]; then
@@ -38,9 +38,11 @@ if [ "$graph_type" == "mvc" ]; then
 # MIS
 elif [ "$graph_type" == "mis" ]; then
    penalty_weight=2
-   init_temperature=0.2
+   init_temperature=1.0
    t_min=0.2
    t_max=0.4
+   l_min=0.2
+   l_max=0.4
    if [ "$max_num_nodes" == 1500 ]; then
       max_num_constraints=7000
       if [ "$t_schedule" == "exp_decay" ]; then
@@ -72,12 +74,16 @@ elif [ "$graph_type" == "ca" ]; then
    init_temperature=50
    t_min=50
    t_max=100
-
+   
+   l_min=300
+   l_max=500
    if [ "$max_num_nodes" == 2000 ]; then
       max_num_constraints=1400
       if [ "$t_schedule" == "exp_decay" ]; then
          step_limit=90000
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=85000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
          step_limit=85000
       else
          echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
@@ -88,6 +94,10 @@ elif [ "$graph_type" == "ca" ]; then
       if [ "$t_schedule" == "exp_decay" ]; then
          step_limit=88000
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=84000
+      elif [ "$t_schedule" == "pen_pt" ]; then
+         step_limit=84000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
          step_limit=84000
       else
          echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
@@ -142,6 +152,6 @@ python -m discs.experiment.main_sampling \
    --run_local=True --save_root=./discs/results --model=ilp \
    --graph_type=${graph_type} --max_num_nodes=${max_num_nodes} --max_num_constraints=${max_num_constraints} \
    --penalty_weight=${penalty_weight} --formulation=${formulation} --reweight=None \
-   --num_instances=100 --num_models=1 --batch_size=15 --chain_length=100000 \
-   --t_schedule=${t_schedule} --init_temperature=${init_temperature} --decay_rate=0.5 \
+   --num_instances=100 --num_models=1 --batch_size=15 --chain_length=100000 --l_min=${l_min} --l_max=${l_max} \
+   --t_schedule=${t_schedule} --init_temperature=${init_temperature} --decay_rate=0.2 \
    --pt=deo --pt_interval=200 --t_min=${t_min} --t_max=${t_max} --log_every_steps=100 --mode=test_step --step_limit=${step_limit}

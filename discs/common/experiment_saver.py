@@ -131,7 +131,7 @@ class Saver:
             )
         self._dump_dict(
             results,
-            f"results_{self.config.model.name}_{self.config.model.graph_type}_{self.config.model.max_num_nodes}_{sampler_name}_{self.config.model.formulation}_{self.config.experiment.final_temperature}_{self.config.experiment.init_temperature}_{self.config.model.penalty}_{self.config.experiment.t_schedule}_{self.config.experiment.decay_rate}_{self.config.experiment.pt}_{self.config.experiment.pt_interval}_{self.config.experiment.t_min}_{self.config.experiment.t_max}_{self.config.experiment.reweight}_{self.config.experiment.batch_size}",
+            f"results_{self.config.model.name}_{self.config.model.graph_type}_{self.config.model.max_num_nodes}_{sampler_name}_{self.config.model.formulation}_{self.config.experiment.final_temperature}_{self.config.experiment.init_temperature}_{self.config.model.penalty}_{self.config.experiment.l_min}_{self.config.experiment.l_max}_{self.config.experiment.t_schedule}_{self.config.experiment.decay_rate}_{self.config.experiment.pt}_{self.config.experiment.pt_interval}_{self.config.experiment.t_min}_{self.config.experiment.t_max}_{self.config.experiment.reweight}_{self.config.experiment.batch_size}",
         )
 
     def dump_params(self, params):

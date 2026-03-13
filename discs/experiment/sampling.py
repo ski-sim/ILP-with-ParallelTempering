@@ -11,6 +11,7 @@ import numpy as np
 import optax
 import tqdm
 from discs.common.parallel_tempering import swap_samples_deo, swap_samples_seo
+import discs.common.penalty_parallel_tempering as penalty_pt
 import wandb
 import os
 
@@ -128,7 +129,7 @@ class Experiment:
         compiled_obj_only_fn = jax.vmap(functools.partial(model.objective))
         compiled_penalty_fn = jax.vmap(functools.partial(model.penalty))
         compiled_mask_fn = jax.jit(jax.vmap(self.mask_per_instance, in_axes=(0, 0)))
-        compiled_pt_fn = jax.jit(
+        compiled_pt_temp_fn = jax.jit(
             jax.vmap(
                 functools.partial(
                     swap_samples_deo if self.config.pt == "deo" else swap_samples_seo
@@ -136,6 +137,15 @@ class Experiment:
                 in_axes=(0, 0, 0, None, None),
             )
         )
+        compiled_pt_pen_fn = jax.jit(
+            jax.vmap(
+                functools.partial(
+                    penalty_pt.swap_samples_deo if self.config.pt == "deo" else penalty_pt.swap_samples_seo
+                ),
+                in_axes=(0, 0, 0, 0, None,None)
+            )
+        )
+        
         get_hop = jax.jit(self._get_hop)
         compiled_step = self._compile_sampler_step(step_fn)
         compiled_step_burnin = compiled_step
@@ -151,7 +161,8 @@ class Experiment:
             compiled_mask_fn,
             compiled_obj_only_fn,
             compiled_penalty_fn,
-            compiled_pt_fn,
+            compiled_pt_temp_fn,
+            compiled_pt_pen_fn,
         )
 
     def _get_hop(self, x, new_x):
@@ -269,6 +280,15 @@ class CO_Experiment(Experiment):
                 end_value=0.0,
             )
             schedule = lambda step: pt_base * decay_schedule(step)
+        elif config.t_schedule == "pen_pt":
+            schedule = lambda step: step * 0 + jnp.array(config.init_temperature)
+        elif config.t_schedule == "pen_pt_exp_decay":
+            schedule = optax.exponential_decay(
+                config.init_temperature,
+                config.chain_length,
+                config.decay_rate,
+                end_value=0.0,
+            )
         else:
             raise ValueError("Unknown schedule %s" % config.t_schedule)
         return schedule
@@ -299,7 +319,7 @@ class CO_Experiment(Experiment):
             best_samples,
         ) = self._initialize_chain_vars(bshape)
 
-        stp_burnin, stp_mixing, get_hop, obj_fn, _, mask_fn, obj_only_fn, penalty_fn, pt_fn = (
+        stp_burnin, stp_mixing, get_hop, obj_fn, _, mask_fn, obj_only_fn, penalty_fn, pt_temp_fn, pt_pen_fn = (
             compiled_fns
         )
         fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
@@ -313,6 +333,10 @@ class CO_Experiment(Experiment):
             wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}"
         elif self.config.t_schedule == "pt_exp_decay":
             wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}_decay{self.config.decay_rate}"
+        elif self.config.t_schedule == "pen_pt":
+            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_lmin{self.config.l_min}_lmax{self.config.l_max}"
+        elif self.config.t_schedule == "pen_pt_exp_decay":
+            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_lmin{self.config.l_min}_lmax{self.config.l_max}_decay{self.config.decay_rate}"
         else:
             raise ValueError(f"Unknown t_schedule: {self.config.t_schedule}")
         wandb.init(name=wandb_name)
@@ -370,18 +394,26 @@ class CO_Experiment(Experiment):
             is_valid = state["is_valid"]
 
             # parallel tempering
-            if (
-                "pt" in self.config.t_schedule
+            if (self.config.t_schedule in ["pen_pt", "pen_pt_exp_decay"] and step % self.config.pt_interval == 0):
+                new_x, acceptance_ratio, indices_a, indices_b = pt_pen_fn(
+                    new_x, new_ll, params["temperature"] , jnp.geomspace(self.config.l_min, self.config.l_max, num=self.config.batch_size)[None,:], rng, pt_step
+                )
+                mean_accept = jnp.mean(acceptance_ratio)
+                pairs = [f"{a}-{b}" for a, b in zip(indices_a[0], indices_b[0])]
+                pt_step += 1
+            elif(
+                self.config.t_schedule in ["pt", "pt_exp_decay"] 
                 and self.config.pt in ["deo", "seo"]
                 and step % self.config.pt_interval == 0
             ):
-                new_x, acceptance_ratio, indices_a, indices_b = pt_fn(
+                new_x, acceptance_ratio, indices_a, indices_b = pt_temp_fn(
                     new_x, new_ll, params["temperature"], rng, pt_step
                 )
                 mean_accept = jnp.mean(acceptance_ratio)
                 # FIXME: remove [0] later
                 pairs = [f"{a}-{b}" for a, b in zip(indices_a[0], indices_b[0])]
                 pt_step += 1
+
 
             eval_val = jnp.where(is_valid, new_ll, -jnp.inf)
             best_idx = jnp.argmax(eval_val, axis=-1, keepdims=True)

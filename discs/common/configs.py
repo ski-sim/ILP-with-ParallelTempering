@@ -57,6 +57,8 @@ def get_config(FLAGS):
             pt_interval=FLAGS.pt_interval,
             t_min=FLAGS.t_min,
             t_max=FLAGS.t_max,
+            l_min=FLAGS.l_min,
+            l_max=FLAGS.l_max,
             reweight=FLAGS.reweight,
         ),
     )
