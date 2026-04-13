@@ -6,7 +6,7 @@ def _vectorized_swap_step(new_x, logprob, temperature, penalty_coeffs, indices_a
     logprob_a, logprob_b = logprob[indices_a], logprob[indices_b]
     penalty_coeff_a, penalty_coeff_b = penalty_coeffs[indices_a], penalty_coeffs[indices_b]
 
-    log_acceptance_ratio = (1/temperature) * (penalty_coeff_b - penalty_coeff_a) * (logprob_b - logprob_a)
+    log_acceptance_ratio = (1/temperature) * (penalty_coeff_b - penalty_coeff_a) * (logprob_b/penalty_coeff_b - logprob_a/penalty_coeff_a)
     # shape: (num_swaps, batch_size)
     acceptance_ratio = jnp.exp(log_acceptance_ratio)
 
@@ -20,20 +20,21 @@ def _vectorized_swap_step(new_x, logprob, temperature, penalty_coeffs, indices_a
     return new_x, jnp.minimum(1.0, acceptance_ratio)
 
 
-def swap_samples_deo(new_x, logprob, temperature, penalty_coeffs, rng_key, current_step):
+def swap_samples_deo(new_x, logprob, obj_coeff, temperature, penalty_coeffs, rng_key, current_step):
     # define the indices of the even and odd penalty_coeffs
     rng_key, swap_subkey = jax.random.split(rng_key, 2)
     num_penalty_coeffs = penalty_coeffs.shape[0]
     indices_a = jnp.arange(0, num_penalty_coeffs - 1, 2) + current_step % 2
     indices_b = jnp.arange(1, num_penalty_coeffs, 2) + current_step % 2
-
+    c_x = new_x @ obj_coeff
+    logprob = logprob - c_x
     new_x, acceptance_ratio = _vectorized_swap_step(
         new_x, logprob, temperature, penalty_coeffs, indices_a, indices_b, swap_subkey
     )
     return new_x, acceptance_ratio, indices_a, indices_b
 
 
-def swap_samples_seo(new_x, logprob, temperature, penalty_coeffs, rng_key, current_step):
+def swap_samples_seo(new_x, logprob, obj_coeff, temperature, penalty_coeffs, rng_key, current_step):
     # define the indices of the even and odd penalty_coeffs
     rng_key, choice_subkey, swap_subkey = jax.random.split(rng_key, 3)
 

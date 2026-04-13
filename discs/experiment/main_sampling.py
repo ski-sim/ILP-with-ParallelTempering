@@ -50,7 +50,6 @@ flags.DEFINE_string("mode", "val", "mode")
 flags.DEFINE_float("max_runtime", 200.0, "max_runtime")
 flags.DEFINE_integer("step_limit", 200000, "step_limit")
 
-
 def update_save_dir(config):
     if _RUN_LOCAL.value:
         save_folder = config.model.get("save_dir_name", config.model.name)

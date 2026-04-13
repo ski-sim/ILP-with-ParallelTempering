@@ -26,7 +26,7 @@ class ILP(comb_ebm.BinaryNodeCombEBM):
         self.chunk_size = self.config.get("chunk_size", 1000)
 
         # Precompute flags / helpers to eliminate repeated if-statements
-        self.obj_sign = -1.0 if self.config.graph_type in ("sc", "mvc") else 1.0
+        self.obj_sign = -1.0 if self.config.graph_type in ("sc", "mvc","item" ) else 1.0
 
     def make_init_params(self, rng):
         try:

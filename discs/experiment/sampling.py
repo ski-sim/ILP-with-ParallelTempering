@@ -14,6 +14,49 @@ from discs.common.parallel_tempering import swap_samples_deo, swap_samples_seo
 import discs.common.penalty_parallel_tempering as penalty_pt
 import wandb
 import os
+from pyscipopt import Model, quicksum
+from jax.experimental import io_callback
+from concurrent.futures import ProcessPoolExecutor
+import functools
+from scipy.optimize import linprog
+from joblib import Parallel, delayed
+
+def solve_sub_problem(x_init, cont_indices, int_indices, const_m, rhs, lhs, obj_coeffs):
+    """Solve a sub-ILP problem with fixed integer variables and free continuous variables."""
+    model = Model("SubProblem")
+    model.setParam("limits/time", 10)
+    x_vars = [None] * 1083
+    for i in range(1083):
+        if i in cont_indices:
+            x_vars[i] = model.addVar(vtype="C", name=f"x_{i}", lb=None, ub=None)
+        if i in int_indices:
+            x_vars[i] = model.addVar(name=f"x_{i}", vtype="B", lb=x_init[i].item(), ub=x_init[i].item())
+
+    # set the objective (use the passed-in obj_coeffs parameter)
+    model.setObjective(
+        quicksum(-obj_coeffs[i] * x_vars[i] for i in range(len(x_vars))),
+        "minimize"
+    )
+
+    # set the constraints
+    for j in range(const_m.shape[1]):
+        model.addCons(quicksum(float(const_m[j][h]) * x_vars[h] for h in range(len(x_vars))) <= float(rhs[j]))
+        model.addCons(quicksum(float(const_m[j][h]) * x_vars[h] for h in range(len(x_vars))) >= float(lhs[j]))
+
+    # optimize sub-ILP
+    model.optimize()
+    if model.getNSols() > 0:
+        sol = model.getBestSol()
+        x_ = np.array([model.getSolVal(sol, v) for v in x_vars])
+    else:
+        x_ = np.array([x_init[i].item() for i in range(len(x_vars))])
+    return x_
+
+
+def _solve_single(args):
+    """Top-level wrapper for ProcessPoolExecutor (must be picklable)."""
+    x_single, cont_indices, int_indices, const_m, rhs, lhs, obj_coeffs = args
+    return solve_sub_problem(x_single, cont_indices, int_indices, const_m, rhs, lhs, obj_coeffs)
 
 
 class Experiment:
@@ -142,7 +185,7 @@ class Experiment:
                 functools.partial(
                     penalty_pt.swap_samples_deo if self.config.pt == "deo" else penalty_pt.swap_samples_seo
                 ),
-                in_axes=(0, 0, 0, 0, None,None)
+                in_axes=(0, 0, 0, 0, 0, None,None)
             )
         )
         
@@ -292,6 +335,50 @@ class CO_Experiment(Experiment):
         else:
             raise ValueError("Unknown schedule %s" % config.t_schedule)
         return schedule
+    def solve_sub_lp(self, x_, const_m, rhs, lhs, obj_coeffs, int_indices, cont_indices, obj_sign=1.0):
+        """Solve sub-LP for a single sample. Fix integer vars, optimise continuous vars."""
+        x_int = x_[int_indices]
+        A_cont = const_m[:, cont_indices]
+        A_int  = const_m[:, int_indices]
+        int_contribution = A_int @ x_int
+
+        adj_rhs = rhs - int_contribution
+        adj_lhs = lhs - int_contribution
+
+        A_ub_rows, b_ub_rows = [], []
+
+        finite_ub = np.isfinite(adj_rhs)
+        if finite_ub.any():
+            A_ub_rows.append(A_cont[finite_ub])
+            b_ub_rows.append(adj_rhs[finite_ub])
+
+        finite_lb = np.isfinite(adj_lhs)
+        if finite_lb.any():
+            A_ub_rows.append(-A_cont[finite_lb])
+            b_ub_rows.append(-adj_lhs[finite_lb])
+
+        A_ub = np.vstack(A_ub_rows) if A_ub_rows else None
+        b_ub = np.concatenate(b_ub_rows) if b_ub_rows else None
+
+        c_cont = -obj_sign * obj_coeffs[cont_indices]
+        bounds  = [(None, None)] * len(cont_indices)
+
+        result = linprog(c_cont, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method="highs")
+
+        if result.success:
+            x_result = x_.copy()
+            x_result[cont_indices] = result.x
+            return x_result
+        return x_   # fallback: keep current values if infeasible
+
+    def solve_sub_lp_batch(self, x_batch, const_m, rhs, lhs, obj_coeffs,
+                       int_indices, cont_indices, obj_sign=1.0):
+        results = [
+            self.solve_sub_lp(x_, const_m, rhs, lhs, obj_coeffs,
+                            int_indices, cont_indices, obj_sign)
+            for x_ in x_batch
+        ]
+        return np.stack(results)
 
     def _compute_chain(
         self,
@@ -367,6 +454,17 @@ class CO_Experiment(Experiment):
         pairs = []
         acceptance_ratio = jnp.ones((self.config.num_models, self.config.batch_size)) * -jnp.nan
         elapsed_time = 0
+
+        if 'var_types' in params:
+            cont_indices = np.where(params['var_types'] == 3)[1]
+            int_indices  = np.where(params['var_types'] == 0)[1]
+
+        const_m    = np.array(params['constraint_matrix'][0])
+        rhs        = np.array(params['constraint_rhs'][0])
+        lhs        = np.array(params['constraint_lhs'][0])
+        obj_coeffs = np.array(params['obj_coeffs'].flatten())
+
+        
         for step in tqdm.tqdm(range(1, self.config.chain_length * 2 + 1), dynamic_ncols=True):
             start = time.time()
 
@@ -382,7 +480,16 @@ class CO_Experiment(Experiment):
 
             if self.config.reweight == "mask":
                 params["mask"] = mask_fn(x, params)
-
+                # mask 갱신 후에도 continuous 변수 인덱스는 항상 0 유지
+            if 'var_types' in params:
+                params['mask'] = jnp.where(params['var_types'] == 3, 0, params['mask'])
+            # solve sub-ILP
+            if jnp.sum(params['var_types'] == 3) > 0:
+                x_opt = self.solve_sub_lp_batch(np.array(x.squeeze()), const_m, rhs, lhs, obj_coeffs,
+                                int_indices, cont_indices, obj_sign=1.0)
+                if x_opt is not None:
+                    x = jnp.expand_dims(jnp.array(x_opt), 0)
+            # transition
             new_x, state, acc = stp_mixing(
                 rng=step_rng,
                 x=x,
@@ -396,7 +503,7 @@ class CO_Experiment(Experiment):
             # parallel tempering
             if (self.config.t_schedule in ["pen_pt", "pen_pt_exp_decay"] and step % self.config.pt_interval == 0):
                 new_x, acceptance_ratio, indices_a, indices_b = pt_pen_fn(
-                    new_x, new_ll, params["temperature"] , jnp.geomspace(self.config.l_min, self.config.l_max, num=self.config.batch_size)[None,:], rng, pt_step
+                    new_x, new_ll, params['obj_coeffs'], params["temperature"] , jnp.geomspace(self.config.l_min, self.config.l_max, num=self.config.batch_size)[None,:], rng, pt_step
                 )
                 mean_accept = jnp.mean(acceptance_ratio)
                 pairs = [f"{a}-{b}" for a, b in zip(indices_a[0], indices_b[0])]

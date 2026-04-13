@@ -13,3 +13,4 @@ wandb/
 results/
 .vscode/
 sco_val/
+sco_ood/
