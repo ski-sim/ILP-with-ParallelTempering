@@ -27,11 +27,48 @@ if [ "$graph_type" == "mvc" ]; then
    elif [ "$max_num_nodes" == 2000 ]; then
       max_num_constraints=15000
       if [ "$t_schedule" == "exp_decay" ]; then
-         step_limit=55000
+         step_limit=10000
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
          step_limit=10000
       elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
-         step_limit=52000
+         step_limit=10000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   else
+      echo "max_num_nodes should be 1500 or 3000"
+      exit 1
+   fi
+
+
+elif [ "$graph_type" == "mvc_long" ]; then
+   penalty_weight=1
+   init_temperature=0.1
+   t_min=0.1
+   t_max=0.2
+   l_min=0.5
+   l_max=1.0
+   if [ "$max_num_nodes" == 1000 ]; then
+      max_num_constraints=65100
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=150000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=150000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=150000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   elif [ "$max_num_nodes" == 2000 ]; then
+      max_num_constraints=15000
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=50000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=50000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=50000
       else
          echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
          exit 1
@@ -43,7 +80,7 @@ if [ "$graph_type" == "mvc" ]; then
 
 # MIS
 elif [ "$graph_type" == "mis" ]; then
-   penalty_weight=10
+   penalty_weight=2
    init_temperature=0.2
    t_min=0.2
    t_max=0.4
@@ -78,15 +115,52 @@ elif [ "$graph_type" == "mis" ]; then
       exit 1
    fi
 
+# MIS
+elif [ "$graph_type" == "mis_long" ]; then
+   penalty_weight=10
+   init_temperature=0.2
+   t_min=0.2
+   t_max=0.4
+   l_min=1.0
+   l_max=2.0
+   if [ "$max_num_nodes" == 1500 ]; then
+      max_num_constraints=7000
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=450000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=450000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=450000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   elif [ "$max_num_nodes" == 3000 ]; then
+      max_num_constraints=15000
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=260000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=260000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=260000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   else
+      echo "max_num_nodes should be 1500 or 3000"
+      exit 1
+   fi
+
 # CA
 elif [ "$graph_type" == "ca" ]; then
-   penalty_weight=400
-   init_temperature=100
-   t_min=100
-   t_max=200
+   penalty_weight=300
+   init_temperature=50
+   t_min=50
+   t_max=100
    
-   l_min=200
-   l_max=400
+   l_min=150
+   l_max=300
    if [ "$max_num_nodes" == 2000 ]; then
       max_num_constraints=1400
       if [ "$t_schedule" == "exp_decay" ]; then
@@ -118,6 +192,45 @@ elif [ "$graph_type" == "ca" ]; then
       exit 1
    fi
 
+# CA
+elif [ "$graph_type" == "ca_long" ]; then
+   penalty_weight=400
+   init_temperature=100
+   t_min=100
+   t_max=200
+   
+   l_min=200
+   l_max=400
+   if [ "$max_num_nodes" == 2000 ]; then
+      max_num_constraints=1400
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=450000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=450000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=450000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   elif [ "$max_num_nodes" == 4000 ]; then
+      max_num_constraints=2800
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=420000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=420000
+      elif [ "$t_schedule" == "pen_pt" ]; then
+         step_limit=420000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=420000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   else
+      echo "max_num_nodes should be 2000 or 4000"
+      exit 1
+   fi
 # SC
 elif [ "$graph_type" == "sc" ]; then
    penalty_weight=5
@@ -155,6 +268,43 @@ elif [ "$graph_type" == "sc" ]; then
       exit 1
    fi
 
+
+# SC
+elif [ "$graph_type" == "sc_long" ]; then
+   penalty_weight=5
+   init_temperature=1.0
+   t_min=1.0
+   t_max=2.0
+   l_min=2.5
+   l_max=5.0
+   if [ "$max_num_nodes" == 2000 ]; then
+      max_num_constraints=5000
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=450000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=450000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=450000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   elif [ "$max_num_nodes" == 4000 ]; then
+      max_num_constraints=5000
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=37000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=37000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=37000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   else
+      echo "max_num_nodes should be 2000 or 4000"
+      exit 1
+   fi
 # SC
 elif [ "$graph_type" == "item" ]; then
    penalty_weight=3
@@ -196,4 +346,3 @@ python -m discs.experiment.main_sampling \
    --t_schedule=${t_schedule} --init_temperature=${init_temperature} --decay_rate=0.5 \
    --pt=deo --pt_interval=200 --t_min=${init_temperature} --t_max=${t_max} --log_every_steps=100 --mode=test_step --step_limit=${step_limit}
 wait
-
