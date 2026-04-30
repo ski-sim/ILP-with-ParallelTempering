@@ -2,16 +2,14 @@ import jax
 import jax.numpy as jnp
 
 
-def _vectorized_swap_step(new_x, logprob, temperature, penalty_coeffs, indices_a, indices_b, rng_key):
-    logprob_a, logprob_b = logprob[indices_a], logprob[indices_b]
+def _vectorized_swap_step(new_x, P_x, temperature, penalty_coeffs, indices_a, indices_b, rng_key):
     penalty_coeff_a, penalty_coeff_b = penalty_coeffs[indices_a], penalty_coeffs[indices_b]
+    P_a, P_b = P_x[indices_a]/penalty_coeff_b, P_x[indices_b]/penalty_coeff_a # P(x)= \Sum (Ax-b)
 
-    log_acceptance_ratio = (1/temperature) * (penalty_coeff_b - penalty_coeff_a) * (logprob_b/penalty_coeff_b - logprob_a/penalty_coeff_a)
+    log_acceptance_ratio = (1/temperature) * (penalty_coeff_b - penalty_coeff_a) * (P_b - P_a) # \beta * \Delata \lambda * (P_b-P_a)
     # shape: (num_swaps, batch_size)
     acceptance_ratio = jnp.exp(log_acceptance_ratio)
-
     is_accept = jax.random.uniform(rng_key, shape=log_acceptance_ratio.shape) < acceptance_ratio
-
     swapped_a = jnp.where(is_accept[..., None], new_x[indices_b], new_x[indices_a])
     swapped_b = jnp.where(is_accept[..., None], new_x[indices_a], new_x[indices_b])
 
@@ -27,9 +25,11 @@ def swap_samples_deo(new_x, logprob, obj_coeff, temperature, penalty_coeffs, rng
     indices_a = jnp.arange(0, num_penalty_coeffs - 1, 2) + current_step % 2
     indices_b = jnp.arange(1, num_penalty_coeffs, 2) + current_step % 2
     c_x = new_x @ obj_coeff
-    logprob = logprob - c_x
+    
+    P_x = -(logprob -c_x)  #(-1)(logprob-c^Tx) = (-1)-\lambda  * \Sum (Ax-b)
+
     new_x, acceptance_ratio = _vectorized_swap_step(
-        new_x, logprob, temperature, penalty_coeffs, indices_a, indices_b, swap_subkey
+        new_x, P_x, temperature, penalty_coeffs, indices_a, indices_b, swap_subkey
     )
     return new_x, acceptance_ratio, indices_a, indices_b
 

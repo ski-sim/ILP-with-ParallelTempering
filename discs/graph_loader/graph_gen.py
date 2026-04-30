@@ -6,6 +6,7 @@ from discs.graph_loader import mis_loader
 from discs.graph_loader import maxclique_loader
 from discs.graph_loader import normcut_loader
 from discs.graph_loader import ilp_loader
+from discs.graph_loader import milp_loader
 
 def get_graphs(config):
   """Get graph loader."""
@@ -36,7 +37,9 @@ def get_graphs(config):
   elif config.model.graph_type == 'gap_rand':
     return normcut_loader.RandGraphs(
         config.model.data_root, config.model)
-  elif config.model.graph_type in ['sc', 'ca', 'mis','mvc','item','sc_long', 'ca_long', 'mis_long','mvc_long']:
+  elif config.model.graph_type in ['sc', 'ca', 'mis','mvc','sc_long', 'ca_long', 'mis_long','mvc_long']:
     return ilp_loader.ILPGraphGen(config.model.data_root, config.model)
+  elif config.model.graph_type in ['item']:
+    return milp_loader.MILPGraphGen(config.model.data_root, config.model)
   else:
     raise ValueError('Unknown graph type %s' % config.model.graph_type)

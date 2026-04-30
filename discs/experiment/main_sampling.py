@@ -49,6 +49,7 @@ flags.DEFINE_string("reweight", "None", "reweight")
 flags.DEFINE_string("mode", "val", "mode")
 flags.DEFINE_float("max_runtime", 200.0, "max_runtime")
 flags.DEFINE_integer("step_limit", 200000, "step_limit")
+flags.DEFINE_integer("lp_interval", 1, "LP solve frequency (1 = every MCMC step)")
 
 def update_save_dir(config):
     if _RUN_LOCAL.value:

@@ -20,11 +20,11 @@ class LBPforILP(locallybalanced.LocallyBalancedSampler):
     def step(self, model, rng, x, model_param, state, x_mask=None):
         rng_new_sample, rng_acceptance = jax.random.split(rng)
         ll_x, y, trajectory, num_calls_forward, is_valid_x = self.proposal(
-            model, rng_new_sample, x, model_param, state
+            model, rng_new_sample, x, model_param, state, x_mask
         )
         ll_x2y = trajectory["ll_x2y"]
         ll_y, ll_y2x, num_calls_backward, is_valid_y = self.ll_y2x(
-            model, x, model_param, trajectory, y
+            model, x, model_param, trajectory, y, x_mask
         )
 
         log_acc = ll_y + ll_y2x - ll_x - ll_x2y
@@ -75,7 +75,7 @@ class LBPforILP(locallybalanced.LocallyBalancedSampler):
         state = super().make_init_state(rng)
         return state
 
-    def get_local_dist(self, model, x, model_param):
+    def get_local_dist(self, model, x, model_param, x_mask=None):
         # Lazy initialization: create neighborhood_fn only once
         if not hasattr(self, "neighborhood_fn"):
             self.neighborhood_fn = model.logratio_in_neighborhood
@@ -84,11 +84,13 @@ class LBPforILP(locallybalanced.LocallyBalancedSampler):
         logits = self.apply_weight_function_logscale(logratio)
         if self.num_categories != 2:
             logits = logits * (1 - x) + x * -1e9
+        if x_mask is not None:
+            logits = logits * x_mask + -1e9 * (1 - x_mask)
         log_prob = jax.nn.log_softmax(logits, -1)
         return ll_x, log_prob, num_calls, is_valid_x
 
-    def proposal(self, model, rng, x, model_param, state):
-        ll_x, log_prob, num_calls, is_valid_x = self.get_local_dist(model, x, model_param)
+    def proposal(self, model, rng, x, model_param, state, x_mask=None):
+        ll_x, log_prob, num_calls, is_valid_x = self.get_local_dist(model, x, model_param, x_mask)
 
         if self.num_categories > 2:
             log_prob_all = jnp.reshape(log_prob, [log_prob.shape[0], -1, self.num_categories])
@@ -115,8 +117,8 @@ class LBPforILP(locallybalanced.LocallyBalancedSampler):
         }
         return ll_x, y, trajectory, num_calls, is_valid_x
 
-    def ll_y2x(self, model, x, model_param, forward_trajectory, y):
-        ll_y, log_prob, num_calls, is_valid_y = self.get_local_dist(model, y, model_param)
+    def ll_y2x(self, model, x, model_param, forward_trajectory, y, x_mask=None):
+        ll_y, log_prob, num_calls, is_valid_y = self.get_local_dist(model, y, model_param, x_mask)
 
         if self.num_categories > 2:
             log_prob_all = jnp.reshape(log_prob, [log_prob.shape[0], -1, self.num_categories])

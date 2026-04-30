@@ -14,3 +14,7 @@ results/
 .vscode/
 sco_val/
 sco_ood/
+CLAUDE.md
+*.md
+*.pdf
+*.png

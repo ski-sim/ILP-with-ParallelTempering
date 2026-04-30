@@ -23,26 +23,17 @@ def get_constraint_matrix(model):
         rhs[i] = model.getRhs(cons)
         for var_name, coef in model.getValsLinear(cons).items():
             A[i, var_idx[var_name]] = coef
+    return A, rhs, lhs, var_idx
 
-    return A, rhs, lhs
 
-
-def get_obj_coefficients(expr, num_vars):
-    coeffs_dict = {}
+def get_obj_coefficients(expr, num_vars, var_idx):
+    coeffs = np.zeros(num_vars) 
     for term, coeff in expr.terms.items():
         var_name = str(term).split("(")[1].split(")")[0]  # Term(x0) -> x0
         numbers = re.findall(r"\d+", var_name)
         if numbers:
-            var_index = int(numbers[0])
-            coeffs_dict[var_index] = float(coeff)
-    coefficients = []
-    for i in range(num_vars):
-        if i in coeffs_dict:
-            coefficients.append(coeffs_dict[i])
-        else:
-            coefficients.append(0.0)
-
-    return coefficients
+            coeffs[var_idx[var_name]]=float(coeff)
+    return coeffs
 
 
 def get_variable_types(model, max_num_nodes):
@@ -101,10 +92,11 @@ def get_variable_bounds(model, max_num_nodes):
         # SCIP uses +/-1e20 as sentinel for infinity
         lbs[i] = -np.inf if lb <= -1e20 else float(lb)
         ubs[i] = np.inf if ub >= 1e20 else float(ub)
+    
     return lbs, ubs
 
 
-class ILPGraphGen:
+class MILPGraphGen:
     """Generator for ILP graphs."""
 
     def __init__(self, data_root, model_config):
@@ -173,9 +165,9 @@ class ILPGraphGen:
         for idx, (g, sol) in enumerate(generator):
             if idx % num_proc == proc_idx:
                 try:
+                    constraint_matrix, rhs, lhs, var_idx = get_constraint_matrix(g)
                     num_vars = g.getNVars()
-                    obj_coefficients = get_obj_coefficients(g.getObjective(), num_vars)
-                    constraint_matrix, rhs, lhs = get_constraint_matrix(g)
+                    obj_coefficients = get_obj_coefficients(g.getObjective(), num_vars, var_idx)
                     var_types = get_variable_types(g, self._max_num_nodes)
                     # === ADDED by Claude: variable bounds for LP relaxation of continuous vars ===
                     var_lbs, var_ubs = get_variable_bounds(g, self._max_num_nodes)

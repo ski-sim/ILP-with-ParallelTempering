@@ -60,6 +60,7 @@ def get_config(FLAGS):
             l_min=FLAGS.l_min,
             l_max=FLAGS.l_max,
             reweight=FLAGS.reweight,
+            lp_interval=FLAGS.lp_interval,
         ),
     )
     return config_dict.ConfigDict(general_config)
