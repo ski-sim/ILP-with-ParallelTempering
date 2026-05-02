@@ -58,11 +58,11 @@ elif [ "$graph_type" == "mvc_long" ]; then
    elif [ "$max_num_nodes" == 2000 ]; then
       max_num_constraints=15000
       if [ "$t_schedule" == "exp_decay" ]; then
-         step_limit=50000
+         step_limit=25000
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
-         step_limit=50000
+         step_limit=25000
       elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
-         step_limit=50000
+         step_limit=25000
       else
          echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
          exit 1
@@ -124,11 +124,11 @@ elif [ "$graph_type" == "mis_long" ]; then
    elif [ "$max_num_nodes" == 3000 ]; then
       max_num_constraints=15000
       if [ "$t_schedule" == "exp_decay" ]; then
-         step_limit=260000
+         step_limit=130000
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
-         step_limit=260000
+         step_limit=130000
       elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
-         step_limit=260000
+         step_limit=130000
       else
          echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
          exit 1
@@ -192,12 +192,12 @@ elif [ "$graph_type" == "ca_long" ]; then
    elif [ "$max_num_nodes" == 4000 ]; then
       max_num_constraints=2800
       if [ "$t_schedule" == "exp_decay" ]; then
-         step_limit=420000
+         step_limit=210000
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
-         step_limit=420000
+         step_limit=210000
       elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
          penalty_weight=400
-         step_limit=420000
+         step_limit=210000
       else
          echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
          exit 1
@@ -229,7 +229,7 @@ elif [ "$graph_type" == "sc" ]; then
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
          step_limit=74000
       elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
-         step_limit=74000
+         step_limit=74000 
       else
          echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
          exit 1
@@ -259,11 +259,11 @@ elif [ "$graph_type" == "sc_long" ]; then
    elif [ "$max_num_nodes" == 4000 ]; then
       max_num_constraints=5000
       if [ "$t_schedule" == "exp_decay" ]; then
-         step_limit=37000
+         step_limit=185000
       elif [ "$t_schedule" == "pt_exp_decay" ]; then
-         step_limit=37000
+         step_limit=185000
       elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
-         step_limit=37000
+         step_limit=185000
       else
          echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
          exit 1
@@ -274,8 +274,8 @@ elif [ "$graph_type" == "sc_long" ]; then
    fi
 # SC
 elif [ "$graph_type" == "item" ]; then
-   penalty_weight=5
-   init_temperature=0.5
+   penalty_weight=10
+   init_temperature=0.1
    if [ "$max_num_nodes" == 1083 ]; then
       max_num_constraints=5000
       if [ "$t_schedule" == "exp_decay" ]; then
@@ -292,7 +292,7 @@ elif [ "$graph_type" == "item" ]; then
 elif [ "$graph_type" == "anonymous" ]; then
    penalty_weight=10
    init_temperature=1.0
-   if [ "$max_num_nodes" == 1083 ]; then
+   if [ "$max_num_nodes" == 1000 ]; then
       max_num_constraints=5000
       if [ "$t_schedule" == "exp_decay" ]; then
          step_limit=50000
@@ -306,18 +306,33 @@ elif [ "$graph_type" == "anonymous" ]; then
       fi
    fi
 
+elif [ "$graph_type" == "loadBalancing" ]; then
+   penalty_weight=10
+   init_temperature=1.0
+   if [ "$max_num_nodes" == 61000 ]; then
+      max_num_constraints=65000
+      if [ "$t_schedule" == "exp_decay" ]; then
+         step_limit=50000
+      elif [ "$t_schedule" == "pt_exp_decay" ]; then
+         step_limit=55000
+      elif [ "$t_schedule" == "pen_pt_exp_decay" ]; then
+         step_limit=55000
+      else
+         echo "t_schedule should be one of [exp_decay, pt_exp_decay]"
+         exit 1
+      fi
+   fi
 
 else
-   echo "graph_type should be one of [mis, ca, sc]"
+   echo "graph_type should be one of [mis, ca, sc, loadBalancing]"
    exit 1
 fi
-
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.96
 export XLA_FLAGS="--xla_gpu_enable_triton_gemm=false"
 python -m discs.experiment.main_sampling \
    --sampler_config="discs/samplers/configs/${sampler?}_config.py" \
    --run_local=True --save_root=./discs/results --model=ilp \
-   --graph_type=${graph_type} --max_num_nodes=${max_num_nodes} --max_num_constraints=${max_num_constraints} \
+   --graph_type=$graph_type --max_num_nodes=${max_num_nodes} --max_num_constraints=${max_num_constraints} \
    --penalty_weight=${penalty_weight} --formulation=${formulation}  \
    --num_instances=100 --num_models=1 --batch_size=15 --chain_length=100000 --l_min=$(echo "${penalty_weight}/2" | bc -l) --l_max=${penalty_weight} \
    --t_schedule=${t_schedule} --init_temperature=${init_temperature} --decay_rate=0.5 --reweight=None \
