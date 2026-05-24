@@ -1,11 +1,11 @@
-graph_type=$1  # mis, ca, sc
+instance_name=$1  # mis, ca, sc
 max_num_vars=$2
 t_schedule=$3  # exp_decay, pt_exp_decay
 sampler=${4:-lbp}
 formulation=${5:-max_linear_square}
 
 # MIS
-if [ "$graph_type" == "mis" ]; then
+if [ "$instance_name" == "mis" ]; then
    penalty_weight=2
    init_temperature=0.2
    t_min=0.2
@@ -20,7 +20,7 @@ if [ "$graph_type" == "mis" ]; then
    fi
 
 # CA
-elif [ "$graph_type" == "ca" ]; then
+elif [ "$instance_name" == "ca" ]; then
    penalty_weight=500
    init_temperature=50
    t_min=50
@@ -36,7 +36,7 @@ elif [ "$graph_type" == "ca" ]; then
    fi
 
 # SC
-elif [ "$graph_type" == "sc" ]; then
+elif [ "$instance_name" == "sc" ]; then
    penalty_weight=5
    init_temperature=0.5
    t_min=0.5
@@ -51,7 +51,7 @@ elif [ "$graph_type" == "sc" ]; then
    fi
 
 else
-   echo "graph_type should be one of [mis, ca, sc]"
+   echo "instance_name should be one of [mis, ca, sc]"
    exit 1
 fi
 
@@ -61,7 +61,7 @@ export XLA_FLAGS="--xla_gpu_enable_triton_gemm=false"
 taskset -c 0-31 python -m PT_ILP.main_sampling \
    --sampler_config="PT_ILP/samplers/configs/${sampler?}_config.py" \
    --save_root=./PT_ILP/results --model=ilp \
-   --graph_type=${graph_type} --max_num_vars=${max_num_vars} --max_num_cons=${max_num_cons} \
+   --instance_name=${instance_name} --max_num_vars=${max_num_vars} --max_num_cons=${max_num_cons} \
    --penalty_weight=${penalty_weight} --formulation=${formulation} --reweight=None \
    --num_instances=5 --num_models=1 --batch_size=15 --chain_length=100000 \
    --t_schedule=${t_schedule} --init_temperature=${init_temperature} --decay_rate=0.5 \
