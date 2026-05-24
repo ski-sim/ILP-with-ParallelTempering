@@ -108,7 +108,7 @@ class ILPGraphGen:
     def __init__(self, data_root, model_config):
         super().__init__()
         data_folder = os.path.join(
-            data_root, "%s_%d" % (model_config.graph_type, model_config.max_num_vars)
+            data_root, "%s_%d" % (model_config.instance_name, model_config.max_num_vars)
         )
         if not os.path.exists(data_folder):
             print(f"Warning: Data folder {data_folder} does not exist")
@@ -221,9 +221,9 @@ class ILPGraphGen:
 
 def get_instances(config):
     """Get ILP graph loader."""
-    if config.model.graph_type in [
+    if config.model.instance_name in [
         'sc', 'ca', 'mis', 'mvc',
         'sc_long', 'ca_long', 'mis_long', 'mvc_long',
     ]:
         return ILPGraphGen(config.model.data_root, config.model)
-    raise ValueError('Unknown graph type %s' % config.model.graph_type)
+    raise ValueError('Unknown instance name %s' % config.model.instance_name)

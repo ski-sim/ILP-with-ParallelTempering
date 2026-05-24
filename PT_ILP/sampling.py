@@ -227,7 +227,6 @@ class MCMCExperiment:
         pairs = []
         acceptance_ratio = jnp.ones((self.config.num_models, self.config.batch_size)) * -jnp.nan
         elapsed_time = 0
-        lp_interval = int(self.config.get("lp_interval", 50))
 
         lp = self._setup_lp_state(params, model)
         cont_indices = lp['cont_indices']
@@ -258,7 +257,7 @@ class MCMCExperiment:
             if 'var_types' in params:
                 params['mask'] = jnp.where(params['var_types'] == 3, 0, params['mask'])
             # solve sub-ILP
-            if jnp.sum(params['var_types'] == 3) > 0 and (step - 1) % self.config.lp_interval == 0:
+            if jnp.sum(params['var_types'] == 3) > 0:
                 x_opt = self.solve_sub_lp_batch(
                         np.array(x.squeeze(axis=0)), const_m, rhs, lhs, obj_coeffs,
                         int_indices, cont_indices, cont_bounds, obj_sign=lp_obj_sign,
@@ -560,7 +559,7 @@ class MCMCExperiment:
 
     def _init_wandb(self):
         """Build a run name from config and init the wandb run."""
-        wandb_name = f"{self.config_model.graph_type}_{self.config_model.max_num_vars}_{self.sampler_name}_{self.config_model.formulation}_lambda{self.config_model.penalty}_bsz{self.config.batch_size}_{self.config.t_schedule}"
+        wandb_name = f"{self.config_model.instance_name}_{self.config_model.max_num_vars}_{self.sampler_name}_{self.config_model.formulation}_lambda{self.config_model.penalty}_bsz{self.config.batch_size}_{self.config.t_schedule}"
         if self.config.t_schedule == "constant":
             wandb_name += f"_init{self.config.init_temperature}"
         elif self.config.t_schedule == "exp_decay":

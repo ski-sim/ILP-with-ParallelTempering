@@ -27,7 +27,7 @@ class ILP:
         self.formulation = self.config.get("formulation", "max_linear")
         self.chunk_size = self.config.get("chunk_size", 1000)
 
-        self.obj_sign = -1.0 if self.config.graph_type in ("sc", "mvc", "item") else 1.0
+        self.obj_sign = -1.0 if self.config.instance_name in ("sc", "mvc", "item") else 1.0
 
     def make_init_params(self, rng):
         try:

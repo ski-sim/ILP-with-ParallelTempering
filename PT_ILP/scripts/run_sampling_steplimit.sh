@@ -1,11 +1,11 @@
-graph_type=$1  # mis, ca, sc
+instance_name=$1  # mis, ca, sc
 max_num_vars=$2
 t_schedule=$3  # exp_decay, pt_exp_decay
 sampler=${4:-lbp}
 formulation=${5:-max_linear}
 
 
-if [ "$graph_type" == "mvc" ]; then
+if [ "$instance_name" == "mvc" ]; then
    penalty_weight=1
    init_temperature=0.2
    if [ "$max_num_vars" == 1000 ]; then
@@ -40,7 +40,7 @@ if [ "$graph_type" == "mvc" ]; then
    fi
 
 
-elif [ "$graph_type" == "mvc_long" ]; then
+elif [ "$instance_name" == "mvc_long" ]; then
    penalty_weight=1
    init_temperature=0.2
    if [ "$max_num_vars" == 1000 ]; then
@@ -73,7 +73,7 @@ elif [ "$graph_type" == "mvc_long" ]; then
    fi
 
 # MIS
-elif [ "$graph_type" == "mis" ]; then
+elif [ "$instance_name" == "mis" ]; then
    penalty_weight=2
    init_temperature=0.2
    if [ "$max_num_vars" == 1500 ]; then
@@ -106,7 +106,7 @@ elif [ "$graph_type" == "mis" ]; then
    fi
 
 # MIS
-elif [ "$graph_type" == "mis_long" ]; then
+elif [ "$instance_name" == "mis_long" ]; then
    penalty_weight=2
    init_temperature=0.2
    if [ "$max_num_vars" == 1500 ]; then
@@ -139,7 +139,7 @@ elif [ "$graph_type" == "mis_long" ]; then
    fi
 
 # CA
-elif [ "$graph_type" == "ca" ]; then
+elif [ "$instance_name" == "ca" ]; then
    penalty_weight=300
    init_temperature=50
    if [ "$max_num_vars" == 2000 ]; then
@@ -174,7 +174,7 @@ elif [ "$graph_type" == "ca" ]; then
    fi
 
 # CA
-elif [ "$graph_type" == "ca_long" ]; then
+elif [ "$instance_name" == "ca_long" ]; then
    penalty_weight=300
    init_temperature=50
    if [ "$max_num_vars" == 2000 ]; then
@@ -207,7 +207,7 @@ elif [ "$graph_type" == "ca_long" ]; then
       exit 1
    fi
 # SC
-elif [ "$graph_type" == "sc" ]; then
+elif [ "$instance_name" == "sc" ]; then
    penalty_weight=5
    init_temperature=1.0
    if [ "$max_num_vars" == 2000 ]; then
@@ -241,7 +241,7 @@ elif [ "$graph_type" == "sc" ]; then
 
 
 # SC
-elif [ "$graph_type" == "sc_long" ]; then
+elif [ "$instance_name" == "sc_long" ]; then
    penalty_weight=5
    init_temperature=1.0
    if [ "$max_num_vars" == 2000 ]; then
@@ -273,7 +273,7 @@ elif [ "$graph_type" == "sc_long" ]; then
       exit 1
    fi
 # SC
-elif [ "$graph_type" == "item" ]; then
+elif [ "$instance_name" == "item" ]; then
    penalty_weight=10
    init_temperature=0.1
    if [ "$max_num_vars" == 1083 ]; then
@@ -289,7 +289,7 @@ elif [ "$graph_type" == "item" ]; then
          exit 1
       fi
    fi
-elif [ "$graph_type" == "anonymous" ]; then
+elif [ "$instance_name" == "anonymous" ]; then
    penalty_weight=10
    init_temperature=1.0
    if [ "$max_num_vars" == 1000 ]; then
@@ -306,7 +306,7 @@ elif [ "$graph_type" == "anonymous" ]; then
       fi
    fi
 
-elif [ "$graph_type" == "loadBalancing" ]; then
+elif [ "$instance_name" == "loadBalancing" ]; then
    penalty_weight=10
    init_temperature=1.0
    if [ "$max_num_vars" == 61000 ]; then
@@ -324,7 +324,7 @@ elif [ "$graph_type" == "loadBalancing" ]; then
    fi
 
 else
-   echo "graph_type should be one of [mis, ca, sc, loadBalancing]"
+   echo "instance_name should be one of [mis, ca, sc, loadBalancing]"
    exit 1
 fi
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.96
@@ -332,7 +332,7 @@ export XLA_FLAGS="--xla_gpu_enable_triton_gemm=false"
 python -m PT_ILP.main_sampling \
    --sampler_config="PT_ILP/samplers/configs/${sampler?}_config.py" \
    --save_root=./PT_ILP/results --model=ilp \
-   --graph_type=$graph_type --max_num_vars=${max_num_vars} --max_num_cons=${max_num_cons} \
+   --instance_name=$instance_name --max_num_vars=${max_num_vars} --max_num_cons=${max_num_cons} \
    --penalty_weight=${penalty_weight} --formulation=${formulation}  \
    --num_instances=100 --num_models=1 --batch_size=15 --chain_length=100000 --l_min=$(echo "${penalty_weight}/2" | bc -l) --l_max=${penalty_weight} \
    --t_schedule=${t_schedule} --init_temperature=${init_temperature} --decay_rate=0.5 --reweight=None \

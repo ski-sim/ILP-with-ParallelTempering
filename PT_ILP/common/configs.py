@@ -8,7 +8,7 @@ def get_config(FLAGS):
     general_config = dict(
         model=dict(
             name=FLAGS.model,
-            graph_type=FLAGS.graph_type,
+            instance_name=FLAGS.instance_name,
             data_root=FLAGS.data_root,
             penalty=FLAGS.penalty_weight,
             save_dir_name=FLAGS.save_dir_name,
@@ -48,7 +48,6 @@ def get_config(FLAGS):
             l_min=FLAGS.l_min,
             l_max=FLAGS.l_max,
             reweight=FLAGS.reweight,
-            lp_interval=FLAGS.lp_interval,
         ),
     )
     return config_dict.ConfigDict(general_config)

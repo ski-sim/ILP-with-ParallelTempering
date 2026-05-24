@@ -93,7 +93,7 @@ class BlockLBPSampler(locallybalanced.LocallyBalancedSampler):
 
         Ax = x @ A.T  # [batch, M]
         obj_x = x @ c  # [batch]
-        if self.config.model.graph_type in ["sc", "mvc"]:
+        if self.config.model.instance_name in ["sc", "mvc"]:
             obj_x = -obj_x
 
         v_curr = jnp.maximum(0, jnp.maximum(Ax - ub, lb - Ax))  # [batch, M]
@@ -112,7 +112,7 @@ class BlockLBPSampler(locallybalanced.LocallyBalancedSampler):
         c_sub = c[indices_to_flip]
         delta_x = 1 - 2 * x[:,indices_to_flip]
         delta_obj = c_sub[None, :] * delta_x
-        if self.config.model.graph_type in ["sc", "mvc"]:
+        if self.config.model.instance_name in ["sc", "mvc"]:
             delta_obj = -delta_obj
 
         if self.config.model.formulation == "obj" or self.config.model.formulation == "lagrangian":
