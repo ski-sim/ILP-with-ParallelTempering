@@ -18,3 +18,5 @@ CLAUDE.md
 *.md
 *.pdf
 *.png
+!README.md
+!assets/**
