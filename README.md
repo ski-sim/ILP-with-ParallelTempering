@@ -1,7 +1,7 @@
 # ILP with Parallel Tempering
 
 <p align="center">
-  <img src="assets/pt_methods.pdf" alt="ILP with Parallel Tempering overview" width="720"/>
+  <img src="assets/pt_methods.png" alt="ILP with Parallel Tempering overview" width="720"/>
 </p>
 
 ## Overview
