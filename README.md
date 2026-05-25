@@ -6,13 +6,8 @@
 
 ## Overview
 
-`PT_ILP` is a framework for solving 0/1 Integer Linear Programs (ILPs) with
-MCMC samplers driven by **Parallel Tempering (PT)**. Constraints are folded into
-the objective via a quadratic / hinge penalty and a temperature ladder is run
-in parallel, with DEO swaps exchanging states between adjacent chains. The
-package ships with several samplers (locally balanced proposals, GWG,
-path-auxiliary, DMALA, block Gibbs, hamming-ball, random walk, ...) and a set of
-benchmark instance families:
+`PT_ILP` is a framework for solving Integer Linear Programs (ILPs) with
+MCMC samplers driven by **Parallel Tempering (PT)**. In this work, we propose a solver-free, sampling-based optimization framework for ILP that directly explores discrete feasible regions without training or external solvers. Exploiting the linear structure of ILP, we employ a Locally-Balanced Proposal to construct a transition kernel, thereby avoiding the gradient approximation. To overcome the highly multimodal nature of ILP energy landscapes, we integrate Parallel Tempering. In addition to standard temperature tempering, we introduce penalty tempering, which modulates constraint barriers while preserving the objective landscape over feasible solutions.
 
 - **MVC** — Minimum Vertex Cover (1000, 2000 vars)
 - **MIS** — Maximum Independent Set (1500, 3000 vars)
