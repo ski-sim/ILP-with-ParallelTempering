@@ -28,33 +28,13 @@ class Saver:
         with open(path, "wb") as file:
             pickle.dump(params_dict, file, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def _plot_additional_metrics(self, vals, metric: str):
-        """Used to plot hops and acc ratio of the sampling through time."""
-        plt.plot(jnp.arange(1, 1 + len(vals)), vals, "--b")
-        plt.xlabel("Steps")
-        plt.ylabel(f"{metric}")
-        if metric == "Acc Ratio":
-            plt.ylim((-0.1, 1.1))
-        plt.title(
-            "{} for sampler {} on model {}!".format(
-                metric, self.config.sampler.name, self.config.model.name
-            )
-        )
-        path = f"{self.save_dir}/{metric}_{self.config.sampler.name}_{self.config.model.name}"
-        plt.savefig(path)
-        plt.close()
-
-    def save_results(self, acc_ratio, hops):
-        if self.config.experiment.get_additional_metrics:
-            self._plot_additional_metrics(acc_ratio, "Acc Ratio")
-            self._plot_additional_metrics(hops, "Hops")
-
-    def save_co_results(self, trajectory, best_ratio, running_time, best_samples):
+    def save_ilp_results(self, trajectory, best_ratio, elapsed_time, best_samples, acc_ratios):
         results = {}
         results["trajectory"] = np.array(trajectory)
         results["best_ratio"] = np.array(best_ratio)
-        results["running_time"] = running_time
+        results["elapsed_time"] = elapsed_time
         results["best_ratio_mean"] = np.mean(np.array(best_ratio))
+        results["acc_ratios"] = np.array(acc_ratios)
         if len(best_samples) != 0:
             results["best_samples"] = np.array(best_samples)
 
@@ -67,7 +47,7 @@ class Saver:
             )
         self._dump_dict(
             results,
-            f"results_{self.config.model.name}_{self.config.model.instance_name}_{self.config.model.max_num_vars}_{sampler_name}_{self.config.model.formulation}_{self.config.experiment.final_temperature}_{self.config.experiment.init_temperature}_{self.config.model.penalty}_{self.config.experiment.l_min}_{self.config.experiment.l_max}_{self.config.experiment.t_schedule}_{self.config.experiment.decay_rate}_{self.config.experiment.pt}_{self.config.experiment.pt_interval}_{self.config.experiment.t_min}_{self.config.experiment.t_max}_{self.config.experiment.reweight}_{self.config.experiment.batch_size}",
+            f"results_{self.config.model.name}_{self.config.model.instance_name}_{self.config.model.max_num_vars}_{sampler_name}_{self.config.model.formulation}_{self.config.experiment.final_temperature}_{self.config.experiment.init_temperature}_{self.config.model.penalty}_{self.config.experiment.l_min}_{self.config.experiment.l_max}_{self.config.experiment.t_schedule}_{self.config.experiment.decay_rate}_{self.config.experiment.pt}_{self.config.experiment.pt_interval}_{self.config.experiment.t_min}_{self.config.experiment.t_max}_{self.config.experiment.reheat}_{self.config.experiment.batch_size}",
         )
 
 

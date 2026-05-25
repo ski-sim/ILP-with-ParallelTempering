@@ -47,7 +47,7 @@ def get_config(FLAGS):
             t_max=FLAGS.t_max,
             l_min=FLAGS.l_min,
             l_max=FLAGS.l_max,
-            reweight=FLAGS.reweight,
+            reheat=FLAGS.reheat,
         ),
     )
     return config_dict.ConfigDict(general_config)

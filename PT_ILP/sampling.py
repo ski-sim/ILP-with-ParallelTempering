@@ -2,19 +2,80 @@
 
 import functools
 import time
-from PT_ILP.common import math_util as math
-from PT_ILP.common import utils
+
 import flax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from PT_ILP.common.temperature_pt import swap_samples_deo, swap_samples_seo, swap_samples_reversible
 import tqdm
-import PT_ILP.common.penalty_pt as penalty_pt
 import wandb
-import functools
-from scipy.optimize import linprog
+
+from PT_ILP.common import math_util as math
+from PT_ILP.common import utils
+import PT_ILP.common.penalty_pt as penalty_pt
+from PT_ILP.common.temperature_pt import swap_samples_deo, swap_samples_seo, swap_samples_reversible
+
+
+class ReheatController:
+    """Reheat state and per-step update logic."""
+
+    SKIP_STEP = 200
+    WANDERING_LENGTH = 100
+    THRESHOLD = 0.5
+    PRINT_SPECIFIC_HEAT = False
+
+    def __init__(self, num_models, batch_size, bshape):
+        shape = (num_models, batch_size)
+        temp_shape = bshape + (batch_size,)
+        self.num_models = num_models
+        self.batch_size = batch_size
+
+        self.fake_step = jnp.ones(shape, dtype=jnp.int32)
+        self.max_specific_heat = jnp.zeros(shape, dtype=jnp.float32)
+        self.reheat_step = jnp.zeros(shape, dtype=jnp.int32)
+        self.reheat_time = jnp.zeros(shape)
+        self.trapped_num = jnp.zeros(shape, dtype=jnp.int32)
+        self.trapped_threshold_length = jnp.ones(shape, dtype=jnp.int32) * self.WANDERING_LENGTH
+        self.old_value = jnp.zeros(shape, dtype=jnp.float32)
+        self.value_chain = jnp.zeros((100, num_models, batch_size))
+        self.init_temperature = jnp.ones(temp_shape, dtype=jnp.float32)
+
+    def initial_params_temperature(self, t_schedule):
+        return t_schedule(0) * self.init_temperature
+
+    def temperature(self, t_schedule, params_temperature_shape):
+        cur_temp = t_schedule(self.fake_step)
+        params_temperature = jnp.array(cur_temp).reshape(params_temperature_shape)
+        return cur_temp, params_temperature
+
+    def update(self, eval_val, cur_temp, step):
+        self.value_chain = self.value_chain.at[(step - 1) % 100].set(eval_val)
+        append_temp = cur_temp.reshape(self.num_models, self.batch_size)
+
+        value_diff = jnp.abs(eval_val - self.old_value)
+        is_trapped_step = value_diff < self.THRESHOLD
+        self.trapped_num = jnp.where(is_trapped_step, self.trapped_num + 1, 0)
+        self.old_value = eval_val
+
+        is_trapped_full = self.trapped_num >= self.trapped_threshold_length
+        self.reheat_time = self.reheat_time + is_trapped_full.astype(self.reheat_time.dtype)
+
+        if step >= self.SKIP_STEP:
+            specific_heat = jnp.var(self.value_chain, axis=0) / (append_temp ** 2)
+            specific_heat = jnp.where(self.reheat_time == 0, specific_heat, 0)
+            if self.PRINT_SPECIFIC_HEAT:
+                print("specific_heat", jnp.mean(specific_heat))
+            self.max_specific_heat = jnp.maximum(specific_heat, self.max_specific_heat)
+            self.reheat_step = jnp.where(
+                specific_heat >= self.max_specific_heat, self.fake_step, self.reheat_step
+            )
+            self.fake_step = jnp.where(
+                is_trapped_full, self.reheat_step - 1, self.fake_step
+            )
+
+    def tick(self):
+        self.fake_step = self.fake_step + 1
 
 
 class MCMCExperiment:
@@ -34,12 +95,10 @@ class MCMCExperiment:
         self.sample_idx = None
         if jax.local_device_count() != 1 and self.config.run_parallel:
             self.parallel = True
+        
+        self.batches = []
 
     def run(self, model, sampler, saver):
-        self.all_chain = []
-        self.all_best_ratio = []
-        self.all_current_time = []
-        self.all_best_samples = []
         while True:
             if not self.run_batch(model, sampler, saver):
                 break
@@ -86,8 +145,8 @@ class MCMCExperiment:
         if data_list is None:
             return None, x0, state
 
-        # Unpack per-model (idx, params, _ref_obj) tuples and stack params trees
-        sample_idx, params, _ = zip(*data_list)
+        # Unpack per-model (idx, params) tuples and stack params trees
+        sample_idx, params = zip(*data_list)
         params = flax.core.frozen_dict.unfreeze(utils.tree_stack(params))
         self.sample_idx = jnp.array(sample_idx)
 
@@ -133,8 +192,7 @@ class MCMCExperiment:
         step_fn = jax.vmap(functools.partial(sampler.step, model=model))
         compiled_step = self._compile_sampler_step(step_fn)
         compiled_penalty_fn = jax.vmap(functools.partial(model.penalty))
-        compiled_mask_fn = jax.jit(jax.vmap(self.mask_infeasible_region, in_axes=(0, 0)))
-        
+
         # Pick PT swap functions based on pt mode (fallback to seo for unknown modes)
         temp_swap_fns = {
             "deo": swap_samples_deo,
@@ -149,14 +207,19 @@ class MCMCExperiment:
         temp_swap_fn = temp_swap_fns.get(self.config.pt, swap_samples_seo)
         pen_swap_fn = pen_swap_fns.get(self.config.pt, penalty_pt.swap_samples_seo)
 
-        compiled_pt_temp_fn = jax.jit(jax.vmap(temp_swap_fn, in_axes=(0, 0, 0, None, None)))
-        compiled_pt_pen_fn = jax.jit(jax.vmap(pen_swap_fn, in_axes=(0, 0, 0, 0, 0, None, None)))
+        compiled_pt_temp_fn = jax.jit(jax.vmap(
+            temp_swap_fn,
+            in_axes=(0, 0, 0, None, None),
+            out_axes=(0, 0, None, None),
+        ))
+        compiled_pt_pen_fn = jax.jit(jax.vmap(
+            pen_swap_fn,
+            in_axes=(0, 0, 0, 0, 0, None, None),
+            out_axes=(0, 0, None, None),
+        ))
 
-        model_frwrd = jax.jit(model.forward)
         return (
             compiled_step,
-            model_frwrd,
-            compiled_mask_fn,
             compiled_penalty_fn,
             compiled_pt_temp_fn,
             compiled_pt_pen_fn,
@@ -184,42 +247,43 @@ class MCMCExperiment:
     ):
         """Generates the chain of samples."""
 
+        wandb_name = f"{self.config_model.instance_name}_{self.config_model.max_num_vars}_{self.sampler_name}_{self.config_model.formulation}_lambda{self.config_model.penalty}_bsz{self.config.batch_size}_{self.config.t_schedule}"
+        if self.config.t_schedule == "constant":
+            wandb_name += f"_init{self.config.init_temperature}"
+        elif self.config.t_schedule == "exp_decay":
+            wandb_name += f"_init{self.config.init_temperature}_decay{self.config.decay_rate}"
+        elif self.config.t_schedule == "pt":
+            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}"
+        elif self.config.t_schedule == "pt_exp_decay":
+            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}_decay{self.config.decay_rate}"
+        elif self.config.t_schedule == "pen_pt":
+            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_lmin{self.config.l_min}_lmax{self.config.l_max}"
+        elif self.config.t_schedule == "pen_pt_exp_decay":
+            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_lmin{self.config.l_min}_lmax{self.config.l_max}_decay{self.config.decay_rate}"
+        else:
+            raise ValueError(f"Unknown t_schedule: {self.config.t_schedule}")
+        wandb.init(name=wandb_name)
+
         (
             chain,
             acc_ratios,
-            hops,
-            running_time,
-            best_ratio,
             init_temperature,
             t_schedule,
             sample_mask,
             best_samples,
         ) = self._initialize_chain_vars(bshape)
 
-        step_kernel, _, mask_fn, penalty_fn, pt_temp_fn, pt_pen_fn = compiled_fns
+        step_fn, penalty_fn, pt_temp_fn, pt_pen_fn = compiled_fns
         fn_reshape = lambda x: jnp.reshape(x, bshape + x.shape[1:])
-
-        self._init_wandb()
 
         # reheated mechanism
         best_eval_val = jnp.ones(self.config.num_models) * -jnp.inf
-        value_chain = jnp.zeros((100, self.config.num_models, self.config.batch_size))
-        if self.config.reweight == "reheat":
-            shape = (self.config.num_models, self.config.batch_size)
-            fake_step = jnp.ones(shape, dtype=jnp.int32)
-            max_specific_heat = jnp.zeros(shape, dtype=jnp.float32)
-            reheat_step = jnp.zeros(shape, dtype=jnp.int32)
-            print_specific_heat = False
-            skip_step = 200
-            wandering_length = 100
-            threshold = 0.5
-            reheat_time = jnp.zeros((self.config.num_models, self.config.batch_size))
-            trapped_num = jnp.zeros(shape, dtype=jnp.int32)
-            trapped_threshold_length = jnp.ones(shape, dtype=jnp.int32) * wandering_length
-            old_value = jnp.zeros(shape, dtype=jnp.float32)
-            temp_shape = bshape + (self.config.batch_size,)
-            init_temperature = jnp.ones(temp_shape, dtype=jnp.float32)
-            params["temperature"] = t_schedule(0) * init_temperature  # (100,32)
+        reheat = None
+        if self.config.reheat:
+            reheat = ReheatController(
+                self.config.num_models, self.config.batch_size, bshape
+            )
+            params["temperature"] = reheat.initial_params_temperature(t_schedule)
 
         pt_step = 0
         num_log = 0
@@ -228,22 +292,13 @@ class MCMCExperiment:
         acceptance_ratio = jnp.ones((self.config.num_models, self.config.batch_size)) * -jnp.nan
         elapsed_time = 0
 
-        lp = self._setup_lp_state(params, model)
-        cont_indices = lp['cont_indices']
-        int_indices = lp['int_indices']
-        const_m = lp['const_m']
-        rhs = lp['rhs']
-        lhs = lp['lhs']
-        obj_coeffs = lp['obj_coeffs']
-        lp_obj_sign = lp['lp_obj_sign']
-        cont_bounds = lp['cont_bounds']
-
         for step in tqdm.tqdm(range(1, self.config.chain_length * 2 + 1), dynamic_ncols=True):
-            start = time.time()
+            start_time = time.time()
 
-            if self.config.reweight == "reheat":
-                cur_temp = t_schedule(fake_step)
-                params["temperature"] = jnp.array(cur_temp).reshape(params["temperature"].shape)
+            if reheat is not None:
+                cur_temp, params["temperature"] = reheat.temperature(
+                    t_schedule, params["temperature"].shape
+                )
             else:
                 cur_temp = t_schedule(step)
                 params["temperature"] = init_temperature[:, None] * cur_temp
@@ -251,21 +306,8 @@ class MCMCExperiment:
             rng = jax.random.fold_in(rng, step)
             step_rng = fn_reshape(jax.random.split(rng, math.prod(bshape)))
 
-            if self.config.reweight == "mask":
-                params["mask"] = mask_fn(x, params)
-                # mask 갱신 후에도 continuous 변수 인덱스는 항상 0 유지
-            if 'var_types' in params:
-                params['mask'] = jnp.where(params['var_types'] == 3, 0, params['mask'])
-            # solve sub-ILP
-            if jnp.sum(params['var_types'] == 3) > 0:
-                x_opt = self.solve_sub_lp_batch(
-                        np.array(x.squeeze(axis=0)), const_m, rhs, lhs, obj_coeffs,
-                        int_indices, cont_indices, cont_bounds, obj_sign=lp_obj_sign,
-                    )
-                if x_opt is not None:
-                    x = jnp.expand_dims(jnp.array(x_opt), 0)
             # transition
-            new_x, state, acc = step_kernel(
+            new_x, state, acc = step_fn(
                 rng=step_rng,
                 x=x,
                 model_param=params,
@@ -276,25 +318,29 @@ class MCMCExperiment:
             is_valid = state["is_valid"]
 
             # parallel tempering
-            if (self.config.t_schedule in ["pen_pt", "pen_pt_exp_decay"] and step % self.config.pt_interval == 0):
-                new_x, acceptance_ratio, indices_a, indices_b = pt_pen_fn(
-                    new_x, new_ll, model.obj_sign*params['obj_coeffs'], params["temperature"] , jnp.geomspace(self.config.l_min, self.config.l_max, num=self.config.batch_size)[None,:], rng, pt_step
-                )
-                mean_accept = jnp.mean(acceptance_ratio)
-                pairs = [f"{a}-{b}" for a, b in zip(indices_a[0], indices_b[0])]
-                pt_step += 1
-            elif(
-                self.config.t_schedule in ["pt", "pt_exp_decay"]
-                and self.config.pt in ["deo", "seo", "reversible"]
-                and step % self.config.pt_interval == 0
-            ):
-                new_x, acceptance_ratio, indices_a, indices_b = pt_temp_fn(
-                    new_x, new_ll, params["temperature"], rng, pt_step
-                )
-                mean_accept = jnp.mean(acceptance_ratio)
-                # FIXME: remove [0] later
-                pairs = [f"{a}-{b}" for a, b in zip(indices_a[0], indices_b[0])]
-                pt_step += 1
+            if step % self.config.pt_interval == 0:
+                swap_result = None
+                if self.config.t_schedule in ["pen_pt", "pen_pt_exp_decay"]:
+                    lambda_ladder = jnp.geomspace(
+                        self.config.l_min, self.config.l_max, num=self.config.batch_size
+                    )[None, :]
+                    swap_result = pt_pen_fn(
+                        new_x, new_ll, model.obj_sign * params['obj_coeffs'],
+                        params["temperature"], lambda_ladder, rng, pt_step,
+                    )
+                elif (
+                    self.config.t_schedule in ["pt", "pt_exp_decay"]
+                    and self.config.pt in ["deo", "seo", "reversible"]
+                ):
+                    swap_result = pt_temp_fn(
+                        new_x, new_ll, params["temperature"], rng, pt_step,
+                    )
+
+                if swap_result is not None:
+                    new_x, acceptance_ratio, indices_a, indices_b = swap_result
+                    mean_accept = jnp.mean(acceptance_ratio)
+                    pairs = [f"{a}-{b}" for a, b in zip(indices_a, indices_b)]
+                    pt_step += 1
 
 
             eval_val = jnp.where(is_valid, new_ll, -jnp.inf)
@@ -304,30 +350,24 @@ class MCMCExperiment:
             is_better = batch_best_val > best_eval_val
             best_eval_val = jnp.where(is_better, batch_best_val, best_eval_val)
             best_samples = jnp.where(is_better[..., None], batch_best_x, best_samples)
-            ratio = batch_best_val.reshape(-1)
-            best_ratio = jnp.maximum(ratio, best_ratio)
 
             new_x.block_until_ready()  # wait for new_x to be ready before calculating the time
-            step_time = time.time() - start
-            running_time += step_time  # FIXME: Do we need this?
+            step_time = time.time() - start_time
             elapsed_time += step_time
 
-            if self.config_model.mode == "test":
+            if self.config_model.mode == "runtimelimit":
                 log_cond = elapsed_time / (
                     self.config_model.max_runtime / self.config.log_every_steps
                 ) >= (num_log + 1)
-            elif self.config_model.mode == "test_step":
-                log_cond = step % (self.config_model.step_limit / self.config.log_every_steps) == 0
-            else:  # self.config_model.mode == "val" or "test_step"
-                log_cond = step % self.config.log_every_steps == 0
-
-            if self.config_model.mode == "test_step":
-                terminate_cond = step >= self.config_model.step_limit
-            elif self.config_model.mode == "test":
                 terminate_cond = (
                     elapsed_time > self.config_model.max_runtime
                     and num_log > self.config_model.max_runtime // self.config.log_every_steps
                 )
+            elif self.config_model.mode == "steplimit":
+                log_cond = step % (self.config_model.step_limit / self.config.log_every_steps) == 0
+                terminate_cond = step >= self.config_model.step_limit
+            else:
+                raise ValueError(f"Unknown mode: {self.config_model.mode}")
 
             if log_cond or terminate_cond:
                 num_log += 1
@@ -369,120 +409,55 @@ class MCMCExperiment:
                             f"instance{_j}/elapsed_time": elapsed_time,
                             f"instance{_j}/step": step,
                             **{
-                                f"instance{_j}/swap_accept_{pairs[k]}": acceptance_ratio[0][k]
-                                for k in range(len(pairs))
+                                f"instance{_j}/swap_accept_{pair}": acceptance_ratio[0][k]
+                                for k, pair in enumerate(pairs)
                             },
                         }
                     )
 
                 if terminate_cond:
-                    if self.config_model.mode == "test":
+                    if self.config_model.mode == "runtimelimit":
                         print(
                             f"time limit {self.config_model.max_runtime}s reached, early stopping (step: {step})"
                         )
-                    elif self.config_model.mode == "test_step":
+                    elif self.config_model.mode == "steplimit":
                         print(
                             f"step limit {self.config_model.step_limit} reached, early stopping (elapsed_time: {elapsed_time:.2f}s)"
                         )
                     break
 
-                sample_mask = sample_mask.reshape(best_ratio.shape)
-                br = np.array(best_ratio[sample_mask])
-                br = jax.device_put(br, jax.devices("cpu")[0])
-                chain.append(br)
+                sample_mask = sample_mask.reshape(best_eval_val.shape)
+                bev = np.array(best_eval_val[sample_mask])
+                bev = jax.device_put(bev, jax.devices("cpu")[0])
+                chain.append(bev)
 
-                if self.config.save_samples or self.config_model.name == "normcut":
-                    step_chosen = jnp.argmax(eval_val, axis=-1, keepdims=True)
-                    rnew_x = jnp.reshape(
-                        new_x,
-                        (self.config.num_models, self.config.batch_size) + self.config_model.shape,
-                    )
-                    chosen_samples = jnp.take_along_axis(
-                        rnew_x, jnp.expand_dims(step_chosen, -1), axis=-2
-                    )
-                    chosen_samples = jnp.squeeze(chosen_samples, -2)
-                    is_better = ratio > best_ratio
-                    best_samples = jnp.where(
-                        jnp.expand_dims(is_better, -1), chosen_samples, best_samples
-                    )
+            acc_ratios.append(jnp.mean(acc))
 
-            if self.config.get_additional_metrics:
-                # avg over all models
-                acc = jnp.mean(acc)
-                acc_ratios.append(acc)
-                # hop avg over batch size and num models
-                hops.append(jnp.sum(jnp.abs(x - new_x)) / self.config.batch_size / self.config.num_models)
-
-            if self.config.reweight == "reheat":
-                value_chain = value_chain.at[(step - 1) % 100].set(eval_val)
-                append_temp = cur_temp.reshape(self.config.num_models, self.config.batch_size)
-                value_diff = jnp.abs(eval_val - old_value)
-                trapped_num = jnp.where(
-                    jnp.abs(value_diff) < threshold,
-                    trapped_num + jnp.ones_like(trapped_num),
-                    jnp.zeros_like(trapped_num),
-                )
-                old_value = eval_val
-                reheat_time_array = jnp.where(
-                    trapped_num >= trapped_threshold_length,
-                    jnp.ones_like(trapped_num),
-                    jnp.zeros_like(trapped_num),
-                )
-                reheat_time = reheat_time + reheat_time_array
-                if step >= skip_step:
-                    specific_heat = jnp.var(value_chain, axis=0) / (append_temp**2)
-                    specific_heat = jnp.where(
-                        reheat_time == jnp.zeros_like(reheat_time),
-                        specific_heat,
-                        jnp.zeros_like(reheat_time),
-                    )
-                    if print_specific_heat:
-                        print("specific_heat", jnp.mean(specific_heat))
-                    max_specific_heat = jnp.maximum(specific_heat, max_specific_heat)
-                    reheat_step = jnp.where(
-                        specific_heat >= max_specific_heat, fake_step, reheat_step
-                    )
-                    fake_step = jnp.where(
-                        trapped_num >= trapped_threshold_length,
-                        reheat_step - jnp.ones_like(reheat_step),
-                        fake_step,
-                    )
-
-            # if self.config.reweight == 'reheat': # burn out mechanism
-            #   # we don't calculate specific heat for the mixing phase, since we don't update the critical temperature anymore in case it becomes too small
-            #   value_diff = jnp.abs(eval_val - old_value)
-            #   trapped_num = jnp.where(jnp.abs(value_diff) < threshold, trapped_num + jnp.ones_like(trapped_num),
-            #                           jnp.zeros_like(trapped_num))
-            #   old_value = eval_val
-            #   reheat_time_array = jnp.where(trapped_num >= trapped_threshold_length, jnp.ones_like(trapped_num),
-            #                                 jnp.zeros_like(trapped_num))
-            #   reheat_time = reheat_time + reheat_time_array
-            #   fake_step = jnp.where(trapped_num >= trapped_threshold_length, reheat_step - jnp.ones_like(reheat_step), fake_step)
+            if reheat is not None:
+                reheat.update(eval_val, cur_temp, step)
 
             x = new_x
-            if self.config.reweight == "reheat":
-                fake_step = fake_step + jnp.ones_like(fake_step)
+            if reheat is not None:
+                reheat.tick()
 
-        if not (self.config.save_samples or self.config_model.name == "normcut"):
-            best_samples = []
-
-        # saver.save_co_resuts(
-        #     chain, best_ratio[sample_mask], running_time, best_samples
-        # )
-        # saver.save_results(acc_ratios, hops, None, running_time)
-
-        self.all_chain.append(chain)
-        self.all_best_ratio.append(best_ratio[sample_mask])
-        self.all_current_time.append([running_time])
-        self.all_best_samples.append(best_samples)
-
-        all_chain = np.concatenate(self.all_chain, axis=1)
-        all_best_ratio = np.concatenate(self.all_best_ratio, axis=0)
-        all_current_time = np.concatenate(self.all_current_time, axis=0)
-        all_best_samples = np.concatenate(self.all_best_samples, axis=0)
-
-        saver.save_co_results(all_chain, all_best_ratio, all_current_time, all_best_samples)
-        saver.save_results(acc_ratios, hops)
+        self.batches.append({
+            "trajectory": chain,
+            "best_obj": best_eval_val[sample_mask],
+            "elapsed_time": [elapsed_time],
+            "best_samples": best_samples,
+            "acc_ratios": np.asarray(acc_ratios),
+        })
+        concat_axes = {
+            "trajectory": 1,
+            "best_obj": 0,
+            "elapsed_time": 0,
+            "best_samples": 0,
+            "acc_ratios": 0,
+        }
+        saver.save_ilp_results(**{
+            k: np.concatenate([b[k] for b in self.batches], axis=ax)
+            for k, ax in concat_axes.items()
+        })
 
     # ---------- MCMC loop helpers ----------
 
@@ -491,18 +466,12 @@ class MCMCExperiment:
         sample_mask = self.sample_idx >= 0
         chain = []
         acc_ratios = []
-        hops = []
-        running_time = 0
-        best_ratio = jnp.ones(self.config.num_models, dtype=jnp.float32) * -float("inf")
         init_temperature = jnp.ones(bshape, dtype=jnp.float32)
         dim = math.prod(self.config_model.shape)
         best_samples = jnp.zeros([self.config.num_models, dim])
         return (
             chain,
             acc_ratios,
-            hops,
-            running_time,
-            best_ratio,
             init_temperature,
             t_schedule,
             sample_mask,
@@ -557,133 +526,5 @@ class MCMCExperiment:
             raise ValueError("Unknown schedule %s" % config.t_schedule)
         return schedule
 
-    def _init_wandb(self):
-        """Build a run name from config and init the wandb run."""
-        wandb_name = f"{self.config_model.instance_name}_{self.config_model.max_num_vars}_{self.sampler_name}_{self.config_model.formulation}_lambda{self.config_model.penalty}_bsz{self.config.batch_size}_{self.config.t_schedule}"
-        if self.config.t_schedule == "constant":
-            wandb_name += f"_init{self.config.init_temperature}"
-        elif self.config.t_schedule == "exp_decay":
-            wandb_name += f"_init{self.config.init_temperature}_decay{self.config.decay_rate}"
-        elif self.config.t_schedule == "pt":
-            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}"
-        elif self.config.t_schedule == "pt_exp_decay":
-            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_tmin{self.config.t_min}_tmax{self.config.t_max}_decay{self.config.decay_rate}"
-        elif self.config.t_schedule == "pen_pt":
-            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_lmin{self.config.l_min}_lmax{self.config.l_max}"
-        elif self.config.t_schedule == "pen_pt_exp_decay":
-            wandb_name += f"_{self.config.pt}_int{self.config.pt_interval}_lmin{self.config.l_min}_lmax{self.config.l_max}_decay{self.config.decay_rate}"
-        else:
-            raise ValueError(f"Unknown t_schedule: {self.config.t_schedule}")
-        wandb.init(name=wandb_name)
+        
 
-    def _setup_lp_state(self, params, model):
-        """Prepare numpy arrays and bounds used by the sub-LP solver."""
-        if 'var_types' in params:
-            cont_indices = np.where(params['var_types'] == 3)[1]
-            int_indices = np.where(params['var_types'] == 0)[1]
-        if 'var_types' in params and 'var_lbs' in params and 'var_ubs' in params:
-            var_lbs_np = np.array(params['var_lbs'][0])
-            var_ubs_np = np.array(params['var_ubs'][0])
-            n_vars_total = var_lbs_np.shape[0]
-            var_bounds = [
-                (None if not np.isfinite(var_lbs_np[i]) else float(var_lbs_np[i]),
-                 None if not np.isfinite(var_ubs_np[i]) else float(var_ubs_np[i]))
-                for i in range(n_vars_total)
-            ]
-            cont_bounds = [
-                (None if not np.isfinite(var_lbs_np[i]) else float(var_lbs_np[i]),
-                 None if not np.isfinite(var_ubs_np[i]) else float(var_ubs_np[i]))
-                for i in cont_indices
-            ]
-        else:
-            var_bounds = [(None, None)] * len(obj_coeffs)
-            cont_bounds = [(None, None)] * (len(cont_indices) if 'var_types' in params else 0)
-        return {
-            'cont_indices': cont_indices,
-            'int_indices': int_indices,
-            'const_m': np.array(params['constraint_matrix'][0]),
-            'rhs': np.array(params['constraint_rhs'][0]),
-            'lhs': np.array(params['constraint_lhs'][0]),
-            'obj_coeffs': np.array(params['obj_coeffs'].flatten()),
-            'lp_obj_sign': float(getattr(model, "obj_sign", -1.0)),
-            'var_bounds': var_bounds,
-            'cont_bounds': cont_bounds,
-        }
-
-    def solve_sub_lp_batch(self, x_batch, const_m, rhs, lhs, obj_coeffs,
-                           int_indices, cont_indices, cont_bounds, obj_sign=1.0):
-        results = [
-            self.solve_sub_lp(x_, const_m, rhs, lhs, obj_coeffs,
-                              int_indices, cont_indices, cont_bounds, obj_sign)
-            for x_ in x_batch
-        ]
-        return np.stack(results)
-
-    def solve_sub_lp(self, x_, const_m, rhs, lhs, obj_coeffs,
-                     int_indices, cont_indices, cont_bounds, obj_sign=1.0):
-        """Sub-LP: fix integer vars at MCMC values, optimise only continuous slice.
-
-        max  obj_sign * c_cont^T y_cont
-        s.t. lhs - A_int x_int <= A_cont y_cont <= rhs - A_int x_int
-             y_cont in cont_bounds
-
-        Returns x_ with cont_indices overwritten by the LP optimum, fallback to
-        x_ unchanged on infeasibility.
-        """
-        x_int = x_[int_indices]
-        A_cont = const_m[:, cont_indices]
-        A_int  = const_m[:, int_indices]
-        int_contribution = A_int @ x_int
-
-        adj_rhs = rhs - int_contribution
-        adj_lhs = lhs - int_contribution
-
-        A_ub_rows, b_ub_rows = [], []
-        finite_ub = np.isfinite(adj_rhs)
-        if finite_ub.any():
-            A_ub_rows.append(A_cont[finite_ub])
-            b_ub_rows.append(adj_rhs[finite_ub])
-        finite_lb = np.isfinite(adj_lhs)
-        if finite_lb.any():
-            A_ub_rows.append(-A_cont[finite_lb])
-            b_ub_rows.append(-adj_lhs[finite_lb])
-        A_ub = np.vstack(A_ub_rows) if A_ub_rows else None
-        b_ub = np.concatenate(b_ub_rows) if b_ub_rows else None
-
-        c_cont = -obj_sign * obj_coeffs[cont_indices]
-        bounds = cont_bounds  # per-cont-var (lb, ub); None for unbounded sides
-
-        result = linprog(c_cont, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method="highs")
-
-        if result.success:
-            x_result = x_.copy().astype(np.float64)
-            x_result[cont_indices] = result.x
-            return x_result
-        return x_   # fallback: keep current values if infeasible
-
-    def mask_infeasible_region(self, x, params):
-        cur_selected_vars = x == 1
-        cur_x = x
-
-        constraint_matrix = params["constraint_matrix"]
-        constraint_rhs = params["constraint_rhs"]
-        constraint_lhs = params["constraint_lhs"]
-
-        cur_constraint_matrix = constraint_matrix
-        cur_rhs = constraint_rhs
-        cur_lhs = constraint_lhs
-        cur_constraint_values = jnp.dot(
-            cur_selected_vars.astype(jnp.float32), cur_constraint_matrix.T
-        )
-        sign = (1 - 2 * cur_x).astype(jnp.float32)
-
-        constraint_changes = jnp.einsum("bv,vc->bvc", sign, cur_constraint_matrix.T)
-        updated_values = cur_constraint_values[:, None, :] + constraint_changes
-
-        violates = (updated_values < cur_lhs[None, None, :]) | (
-            updated_values > cur_rhs[None, None, :]
-        )
-        feasible_mask = ~violates.any(axis=2)
-        all_masks = jnp.stack(feasible_mask)
-
-        return all_masks[None, ...]

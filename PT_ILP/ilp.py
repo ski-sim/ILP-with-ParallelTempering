@@ -15,24 +15,23 @@ class ILP:
         self.max_num_vars = self.config.max_num_vars
         self.config_experiment = config.experiment
         if self.config_experiment.t_schedule in ["pen_pt", "pen_pt_exp_decay"]:
-            coeff = jnp.linspace(
+            # per-chain penalty ladder, shape [batch_size]
+            self.penalty_coeff = jnp.geomspace(
                 self.config_experiment.l_min, self.config_experiment.l_max,
                 num=self.config_experiment.batch_size,
             )
-            self.penalty_coeff_1d = coeff          # [batch_size]
-            self.penalty_coeff_2d = coeff[:, None]  # [batch_size, 1]
         else:
-            self.penalty_coeff_1d = self.config.get("penalty", 2.0)
-            self.penalty_coeff_2d = self.penalty_coeff_1d
+            # scalar (0-d array) shared across the batch
+            self.penalty_coeff = jnp.asarray(self.config.get("penalty", 2.0))
         self.formulation = self.config.get("formulation", "max_linear")
         self.chunk_size = self.config.get("chunk_size", 1000)
 
-        self.obj_sign = -1.0 if self.config.instance_name in ("sc", "mvc", "item") else 1.0
+        self.obj_sign = -1.0 if self.config.instance_name in ("sc", "mvc") else 1.0
 
     def make_init_params(self, rng):
         try:
             data_list = next(self.datagen)
-        except:
+        except StopIteration:
             return None
         return data_list
 
@@ -83,7 +82,7 @@ class ILP:
             return penalty_acc + jnp.sum(v, axis=0), None
 
         penalty, _ = jax.lax.scan(scan_body, jnp.zeros(batch_size), (A_scan, ub_scan, lb_scan))
-        return self.penalty_coeff_1d * penalty
+        return self.penalty_coeff * penalty
 
     def forward(self, params, x):
         x = x.astype(jnp.float32)
@@ -123,9 +122,9 @@ class ILP:
             is_valid_x = jnp.sum(v_curr, axis=-1) <= 1e-3  # [batch]  # 1e-3 is a small threshold
         else:
             if self.formulation == "max_linear":
-                penalty_x = self.penalty_coeff_1d * jnp.sum(v_curr, axis=-1)
+                penalty_x = self.penalty_coeff * jnp.sum(v_curr, axis=-1) # \Sum (Ax-b)
             elif self.formulation == "max_linear_square":
-                penalty_x = self.penalty_coeff_1d * jnp.sum(jnp.square(v_curr), axis=-1)
+                penalty_x = self.penalty_coeff * jnp.sum(jnp.square(v_curr), axis=-1) # \Sum (Ax-b)^2
             is_valid_x = penalty_x <= 1e-3  # [batch]  # 1e-3 is a small threshold
         ll_x = (obj_x - penalty_x) / temp  # [batch]
         delta_x = 1 - 2 * x  # [batch, N]
@@ -167,7 +166,7 @@ class ILP:
             penalty_new, _ = jax.lax.scan(
                 scan_body, jnp.zeros((batch_size, N)), (A_scan, eu_scan, el_scan)
             )
-            penalty_new = self.penalty_coeff_2d * penalty_new
+            penalty_new = jnp.asarray(self.penalty_coeff)[..., None] * penalty_new
 
         ll_new = (obj_x[:, None] + delta_obj - penalty_new) / temp[:, None]
         logratios = ll_new - ll_x[:, None]
