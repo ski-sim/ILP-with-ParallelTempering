@@ -7,12 +7,12 @@
 ## Overview
 
 `PT_ILP` is a framework for solving Integer Linear Programs (ILPs) with
-MCMC samplers driven by **Parallel Tempering (PT)**. In this work, we propose a solver-free, sampling-based optimization framework for ILP that directly explores discrete feasible regions without training or external solvers. Exploiting the linear structure of ILP, we employ a Locally-Balanced Proposal to construct a transition kernel, thereby avoiding the gradient approximation. To overcome the highly multimodal nature of ILP energy landscapes, we integrate Parallel Tempering. In addition to standard temperature tempering, we introduce penalty tempering, which modulates constraint barriers while preserving the objective landscape over feasible solutions.
+**Parallel Tempering (PT)**. In this work, we propose a solver-free, sampling-based framework for ILP that directly explores discrete feasible regions without training or external solvers. Exploiting the linear structure of ILP, we employ a Locally-Balanced Proposal to construct a transition kernel, thereby avoiding the gradient approximation. To overcome the highly multimodal nature of ILP energy landscapes, we integrate Parallel Tempering. In addition to standard temperature tempering, we introduce penalty tempering, which modulates constraint barriers while preserving the objective landscape over feasible solutions.
 
 - **MVC** — Minimum Vertex Cover (1000, 2000 vars)
 - **MIS** — Maximum Independent Set (1500, 3000 vars)
 - **CA**  — Combinatorial Auction (2000, 4000 vars)
-- **SC**  — Set Covering (1000, 2000, 4000 vars)
+- **SC**  — Set Covering (2000, 4000 vars)
 
 Five temperature schedules are supported: `exp_decay`, `pt`, `pt_exp_decay`,
 `pen_pt`, and `pen_pt_exp_decay` (the last two also sweep a per-chain penalty

@@ -5,7 +5,7 @@ from setuptools import setup
 
 
 setup(
-    name='ILP-with-ParallelTempering',
+    name='pt-ilp',
     packages=find_namespace_packages(),
     install_requires=[
         'ml_collections',

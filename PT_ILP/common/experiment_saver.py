@@ -28,12 +28,12 @@ class Saver:
         with open(path, "wb") as file:
             pickle.dump(params_dict, file, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def save_ilp_results(self, trajectory, best_ratio, elapsed_time, best_samples, acc_ratios):
+    def save_ilp_results(self, trajectory, best_obj, elapsed_time, best_samples, acc_ratios):
         results = {}
         results["trajectory"] = np.array(trajectory)
-        results["best_ratio"] = np.array(best_ratio)
+        results["best_obj"] = np.array(best_obj)
         results["elapsed_time"] = elapsed_time
-        results["best_ratio_mean"] = np.mean(np.array(best_ratio))
+        results["best_obj_mean"] = np.mean(np.array(best_obj))
         results["acc_ratios"] = np.array(acc_ratios)
         if len(best_samples) != 0:
             results["best_samples"] = np.array(best_samples)
